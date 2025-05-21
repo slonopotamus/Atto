@@ -1,0 +1,39 @@
+﻿{
+	"FileVersion": 3,
+	"FriendlyName": "Atto",
+	"Description": "Minimalistic backend service for Unreal Engine",
+	"Category" : "Online Platform",
+	"CreatedBy": "Marat Radchenko",
+	"CreatedByURL": "https://github.com/slonopotamus",
+	"DocsURL": "https://github.com/slonopotamus/Atto",
+	"MarketplaceURL": "",
+	"CanContainContent": false,
+	"Modules": [
+		{
+			"Name": "AttoCommon",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "AttoClient",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "AttoServer",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "OnlineSubsystemAtto",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "OnlineSubsystemUtils",
+			"Enabled": true
+		}
+	]
+}
