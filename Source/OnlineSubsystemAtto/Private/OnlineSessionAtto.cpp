@@ -118,7 +118,7 @@ bool FOnlineSessionAtto::EndSession(const FName SessionName)
 
 bool FOnlineSessionAtto::DestroySession(const FName SessionName, const FOnDestroySessionCompleteDelegate& CompletionDelegate)
 {
-	const bool bSuccess = Sessions.Remove(SessionName);
+	const bool bSuccess = Sessions.Remove(SessionName) > 0;
 
 	CompletionDelegate.ExecuteIfBound(SessionName, bSuccess);
 	TriggerOnDestroySessionCompleteDelegates(SessionName, bSuccess);

@@ -16,7 +16,7 @@ class ONLINESUBSYSTEMATTO_API FOnlineSubsystemAtto final : public FOnlineSubsyst
 
 	TSharedPtr<FOnlineSessionAtto> SessionInterface;
 
-	TUniquePtr<FAttoClient> AttoClient;
+	TSharedPtr<FAttoClient> AttoClient;
 
 public:
 	explicit FOnlineSubsystemAtto(const FName InInstanceName)
