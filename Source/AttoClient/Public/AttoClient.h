@@ -15,9 +15,9 @@ public:
 
 	void Close();
 
-	DECLARE_EVENT(ThisClass, FAttoClientConnectedEvent);
+	DECLARE_EVENT(FAttoClient, FAttoClientConnectedEvent);
 	FAttoClientConnectedEvent OnConnected;
 
-	DECLARE_EVENT_TwoParams(ThisClass, FAttoClientDisconnectedEvent, const FString& /* Reason */, bool /* bWasClean */);
+	DECLARE_EVENT_TwoParams(FAttoClient, FAttoClientDisconnectedEvent, const FString& /* Reason */, bool /* bWasClean */);
 	FAttoClientDisconnectedEvent OnDisconnected;
 };

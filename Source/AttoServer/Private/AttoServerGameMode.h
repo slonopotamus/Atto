@@ -10,7 +10,7 @@ class ATTOSERVER_API AAttoServerGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 
-	TUniquePtr<FAttoServer> AttoServer;
+	TUniquePtr<FAttoServerInstance> AttoServer;
 
 protected:
 	AAttoServerGameMode();

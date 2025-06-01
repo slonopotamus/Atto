@@ -1,17 +1,29 @@
 #pragma once
 
-struct lws_context;
-struct lws_protocols;
+#include "AttoCommon.h"
+
+class FAttoServerInstance final : FNoncopyable
+{
+	friend class FAttoServer;
+
+	struct lws_context* Context = nullptr;
+
+	struct lws_vhost* Vhost = nullptr;
+
+public:
+	~FAttoServerInstance();
+};
 
 class FAttoServer final
 {
-	lws_context* Context = nullptr;
-
-	lws_protocols* Protocols = nullptr;
+	TOptional<FString> BindAddress;
 
 public:
-	FAttoServer();
-	~FAttoServer();
+	[[nodiscard]] FAttoServer& WithBindAddress(FString InBindAddress) &&
+	{
+		BindAddress = MoveTemp(InBindAddress);
+		return *this;
+	}
 
-	bool Listen(uint32 Port, const FString& BindAddress = TEXT(""));
+	[[nodiscard]] TUniquePtr<FAttoServerInstance> Listen(uint32 Port = Atto::DefaultPort) const;
 };

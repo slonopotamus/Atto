@@ -2,7 +2,7 @@
 
 namespace Atto
 {
-	ATTOCOMMON_API extern const int32 DefaultPort;
+	ATTOCOMMON_API extern const uint32 DefaultPort;
 
 	ATTOCOMMON_API extern const TCHAR* const Protocol;
 } // namespace Atto

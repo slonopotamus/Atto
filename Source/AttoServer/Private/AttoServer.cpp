@@ -13,7 +13,22 @@ struct FAttoServerPerSessionData
 {
 };
 
-static int AttoServerCallback(lws* Wsi, const lws_callback_reasons Reason, void* User, void* In, size_t Len)
+FAttoServerInstance::~FAttoServerInstance()
+{
+	if (Vhost)
+	{
+		lws_vhost_destroy(Vhost);
+		Vhost = nullptr;
+	}
+
+	if (Context)
+	{
+		lws_context_destroy(Context);
+		Context = nullptr;
+	}
+}
+
+static int AttoServerCallback(lws* Wsi, const lws_callback_reasons Reason, void* User, void* In, const size_t Len)
 {
 	switch (Reason)
 	{
@@ -47,50 +62,49 @@ static int AttoServerCallback(lws* Wsi, const lws_callback_reasons Reason, void*
 	return lws_callback_http_dummy(Wsi, Reason, User, In, Len);
 }
 
-FAttoServer::FAttoServer()
+TUniquePtr<FAttoServerInstance> FAttoServer::Listen(const uint32 Port) const
 {
-	Protocols = new lws_protocols[2];
-	FMemory::Memzero(Protocols, sizeof(lws_protocols) * 2);
+	auto Result = MakeUnique<FAttoServerInstance>();
 
-	Protocols[0].name = StringCast<ANSICHAR>(Atto::Protocol).Get();
-	Protocols[0].callback = AttoServerCallback;
-	Protocols[0].per_session_data_size = sizeof(FAttoServerPerSessionData);
-	Protocols[0].rx_buffer_size = 1 * 1024 * 1024;
-}
+	const auto ProtocolName = StringCast<ANSICHAR>(Atto::Protocol);
+	const lws_protocols Protocols[] = {
+	    {
+	        .name = ProtocolName.Get(),
+	        .callback = AttoServerCallback,
+	        .per_session_data_size = sizeof(FAttoServerPerSessionData),
+	        .rx_buffer_size = 1 * 1024 * 1024,
+	        .user = Result.Get(),
+	    },
+	    {},
+	};
 
-FAttoServer::~FAttoServer()
-{
-	if (Context)
+	const auto BindAddressAnsi = StringCast<ANSICHAR>(*BindAddress.Get(TEXT("")));
+	lws_context_creation_info ContextCreationInfo = {
+	    .port = static_cast<int>(Port),
+	    .iface = BindAddress ? BindAddressAnsi.Get() : nullptr,
+	    .protocols = Protocols,
+	    .gid = -1,
+	    .uid = -1,
+	    .options = LWS_SERVER_OPTION_EXPLICIT_VHOSTS,
+	    .user = Result.Get(),
+	};
+
+	Result->Context = lws_create_context(&ContextCreationInfo);
+	if (!Result->Context)
 	{
-		lws_context_destroy(Context);
-		Context = nullptr;
-
-		UE_LOG(LogAtto, Log, TEXT("Atto Server was shut down"));
+		// TODO: Log error
+		return nullptr;
 	}
 
-	delete[] Protocols;
-	Protocols = nullptr;
-}
-
-bool FAttoServer::Listen(const uint32 Port, const FString& BindAddress)
-{
-	if (!ensure(!Context))
+	Result->Vhost = lws_create_vhost(Result->Context, &ContextCreationInfo);
+	if (!Result->Vhost)
 	{
-		return false;
+		// TODO: Log error
+		return nullptr;
 	}
 
-	lws_context_creation_info Info;
-	FMemory::Memzero(&Info, sizeof(decltype(Info)));
+	const auto PortActual = lws_get_vhost_listen_port(Result->Vhost);
+	UE_LOG(LogAtto, Log, TEXT("Atto Server started accepting connections on %s:%d"), StringCast<TCHAR>(BindAddressAnsi.Get()).Get(), PortActual)
 
-	Info.iface = BindAddress.IsEmpty() ? nullptr : StringCast<ANSICHAR>(*BindAddress).Get();
-	Info.port = Port;
-	Info.gid = -1;
-	Info.uid = -1;
-	Info.user = this;
-
-	Context = lws_create_context(&Info);
-
-	UE_LOG(LogAtto, Log, TEXT("Atto Server started accepting connections on %s:%d"), *BindAddress, Port)
-
-	return Context != nullptr;
+	return Result;
 }

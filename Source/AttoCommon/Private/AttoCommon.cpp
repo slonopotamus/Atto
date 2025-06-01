@@ -2,7 +2,7 @@
 
 namespace Atto
 {
-	const int32 DefaultPort = 27777;
+	const uint32 DefaultPort = 27777;
 
 	const TCHAR* const Protocol = TEXT("Atto");
 } // namespace Atto
