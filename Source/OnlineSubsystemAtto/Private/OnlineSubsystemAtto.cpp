@@ -1,5 +1,6 @@
 #include "OnlineSubsystemAtto.h"
 
+#include "OnlineAsyncTaskManagerAtto.h"
 #include "OnlineIdentityAtto.h"
 #include "OnlineSessionAtto.h"
 
@@ -11,6 +12,15 @@ bool FOnlineSubsystemAtto::Init()
 
 	IdentityInterface = MakeShared<FOnlineIdentityAtto>(*this);
 	SessionInterface = MakeShared<FOnlineSessionAtto>(*this);
+
+	TaskManager = MakeShared<FOnlineAsyncTaskManagerAtto>(*this);
+
+	if (!TaskManager->Init())
+	{
+		return false;
+	}
+
+	OnlineAsyncTaskThread = MakeShareable(FRunnableThread::Create(TaskManager.Get(), TEXT("OnlineSubsystemAtto"), 128 * 1024, TPri_Normal));
 
 	return true;
 }
@@ -29,8 +39,13 @@ bool FOnlineSubsystemAtto::Shutdown()
 {
 	UE_LOG_ONLINE(VeryVerbose, TEXT("FOnlineSubsystemAtto::Shutdown()"));
 
+	OnlineAsyncTaskThread.Reset();
+
 	DestructAttoInterface(IdentityInterface);
 	DestructAttoInterface(SessionInterface);
+
+	TaskManager.Reset();
+	AttoClient.Reset();
 
 	Super::Shutdown();
 
@@ -44,6 +59,11 @@ bool FOnlineSubsystemAtto::Tick(float DeltaSeconds)
 	if (!Super::Tick(DeltaSeconds))
 	{
 		return false;
+	}
+
+	if (TaskManager)
+	{
+		TaskManager->GameTick();
 	}
 
 	if (SessionInterface)

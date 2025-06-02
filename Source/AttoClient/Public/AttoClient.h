@@ -1,23 +1,32 @@
 #pragma once
+
 #include "IWebSocket.h"
 
-class FAttoClient final : FNoncopyable
+class ATTOCLIENT_API FAttoClient final : FNoncopyable
 {
 	typedef FAttoClient ThisClass;
+
 	TSharedRef<IWebSocket> WebSocket;
+
+	void OnMessage(const FString& Message);
+
+	void Send(const FString& Message);
 
 public:
 	explicit FAttoClient(const FString& Url);
 
 	void Connect();
 
-	bool IsConnected() const;
+	[[nodiscard]] bool IsConnected() const;
 
-	void Close();
+	void Disconnect();
 
 	DECLARE_EVENT(FAttoClient, FAttoClientConnectedEvent);
 	FAttoClientConnectedEvent OnConnected;
 
 	DECLARE_EVENT_TwoParams(FAttoClient, FAttoClientDisconnectedEvent, const FString& /* Reason */, bool /* bWasClean */);
 	FAttoClientDisconnectedEvent OnDisconnected;
+
+	DECLARE_EVENT_OneParam(FAttoClient, FAttoConnectionErrorEvent, const FString& /* Error */);
+	FAttoConnectionErrorEvent OnConnectionError;
 };

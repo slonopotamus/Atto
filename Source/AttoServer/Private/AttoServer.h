@@ -2,13 +2,25 @@
 
 #include "AttoCommon.h"
 
+class FAttoServer;
+
 class FAttoServerInstance final : FNoncopyable
 {
+	typedef FAttoServerInstance ThisClass;
+
 	friend class FAttoServer;
 
 	struct lws_context* Context = nullptr;
 
 	struct lws_vhost* Vhost = nullptr;
+
+	struct lws_protocols* Protocols;
+
+	FTSTicker::FDelegateHandle TickerHandle;
+
+	FAttoServerInstance();
+
+	bool Tick(float DeltaSeconds);
 
 public:
 	~FAttoServerInstance();

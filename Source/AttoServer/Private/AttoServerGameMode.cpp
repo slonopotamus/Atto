@@ -2,6 +2,7 @@
 
 #include "AttoCommon.h"
 #include "AttoServer.h"
+#include "Kismet/GameplayStatics.h"
 
 AAttoServerGameMode::AAttoServerGameMode()
 {
@@ -24,7 +25,8 @@ void AAttoServerGameMode::InitGame(const FString& MapName, const FString& Option
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
 
-	AttoServer = FAttoServer().Listen();
+	const uint32 Port = UGameplayStatics::GetIntOption(OptionsString, TEXT("Port"), Atto::DefaultPort);
+	AttoServer = FAttoServer().Listen(Port);
 }
 
 void AAttoServerGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)

@@ -6,6 +6,7 @@ public class OnlineSubsystemAtto : ModuleRules
 	{
 		PublicDependencyModuleNames.AddRange([
 			"AttoClient",
+			"AttoCommon",
 			"Core",
 			"CoreUObject",
 			"Json",

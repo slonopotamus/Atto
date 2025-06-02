@@ -2,9 +2,9 @@
 
 namespace Atto
 {
-	const uint32 DefaultPort = 27777;
+	const uint32 DefaultPort{27777};
 
-	const TCHAR* const Protocol = TEXT("Atto");
+	const char* const Protocol{"atto"};
 } // namespace Atto
 
 DEFINE_LOG_CATEGORY(LogAtto);

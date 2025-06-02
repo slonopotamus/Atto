@@ -10,6 +10,9 @@ FAttoClient::FAttoClient(const FString& Url)
 	                                   { OnConnected.Broadcast(); });
 	WebSocket->OnClosed().AddLambda([&](int32 StatusCode, const FString& Reason, bool bWasClean)
 	                                { OnDisconnected.Broadcast(Reason, bWasClean); });
+	WebSocket->OnConnectionError().AddLambda([&](const FString& Error)
+	                                         { OnConnectionError.Broadcast(Error); });
+	WebSocket->OnMessage().AddRaw(this, &ThisClass::OnMessage);
 }
 
 void FAttoClient::Connect()
@@ -17,7 +20,7 @@ void FAttoClient::Connect()
 	WebSocket->Connect();
 }
 
-void FAttoClient::Close()
+void FAttoClient::Disconnect()
 {
 	WebSocket->Close();
 }
@@ -25,4 +28,13 @@ void FAttoClient::Close()
 bool FAttoClient::IsConnected() const
 {
 	return WebSocket->IsConnected();
+}
+
+void FAttoClient::OnMessage(const FString& Message)
+{
+}
+
+void FAttoClient::Send(const FString& Message)
+{
+	WebSocket->Send(Message);
 }

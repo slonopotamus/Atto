@@ -1,6 +1,10 @@
 #include "OnlineIdentityAtto.h"
 
+#include "AttoClient.h"
+#include "AttoCommon.h"
+#include "OnlineAsyncTaskManagerAtto.h"
 #include "OnlineError.h"
+#include "OnlineSubsystemAtto.h"
 #include "UniqueNetIdAtto.h"
 #include "UserOnlineAccountAtto.h"
 
@@ -18,9 +22,34 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 		return false;
 	}
 
-	const auto UserId = FUniqueNetIdAtto::Create(1);
-	Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
-	TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
+	if (!Subsystem.AttoClient)
+	{
+		Subsystem.AttoClient = MakeShared<FAttoClient>(FString::Printf(TEXT("ws://localhost:%d"), Atto::DefaultPort));
+		Subsystem.AttoClient->OnConnectionError.AddLambda([](const FString& Error)
+		                                                  { UE_LOG(LogAtto, Error, TEXT("%s"), *Error); });
+	}
+
+	Subsystem.TaskManager->AddGenericToInQueue([this, LocalUserNum]
+	                                           {
+		TSharedPtr<FDelegateHandle> DelegateHandle = MakeShared<FDelegateHandle>();
+		auto OnConnected = [this, LocalUserNum, DelegateHandle]
+		{
+			// TODO: Fill user id
+			const auto UserId = FUniqueNetIdAtto::Create(1);
+			Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
+			TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
+			Subsystem.AttoClient->OnConnected.Remove(*DelegateHandle);
+		};
+		
+		if (Subsystem.AttoClient->IsConnected())
+		{
+			OnConnected();
+		}
+		else
+		{
+			DelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnConnected.AddLambda(OnConnected));
+			Subsystem.AttoClient->Connect();
+		} });
 
 	return true;
 }
