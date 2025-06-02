@@ -18,7 +18,7 @@ class FAttoServerInstance final : FNoncopyable
 
 	FTSTicker::FDelegateHandle TickerHandle;
 
-	FAttoServerInstance();
+	explicit FAttoServerInstance(const FAttoServer& Config);
 
 	bool Tick(float DeltaSeconds);
 
@@ -28,7 +28,11 @@ public:
 
 class FAttoServer final
 {
+	friend class FAttoServerInstance;
+
 	TOptional<FString> BindAddress;
+	uint32 ReceiveBufferSize = 65536;
+	uint32 ListenPort = Atto::DefaultPort;
 
 public:
 	[[nodiscard]] FAttoServer& WithBindAddress(FString InBindAddress) &&
@@ -37,5 +41,19 @@ public:
 		return *this;
 	}
 
-	[[nodiscard]] TUniquePtr<FAttoServerInstance> Listen(uint32 Port = Atto::DefaultPort) const;
+	[[nodiscard]] FAttoServer& WithReceiveBufferSize(const uint32 InReceiveBufferSize) &&
+	{
+		ReceiveBufferSize = InReceiveBufferSize;
+		return *this;
+	}
+
+	[[nodiscard]] FAttoServer& WithListenPort(const uint32 InListenPort) &&
+	{
+		ListenPort = InListenPort;
+		return *this;
+	}
+
+	[[nodiscard]] FAttoServer& WithOptions(const FString& OptionsString) &&;
+
+	[[nodiscard]] TUniquePtr<FAttoServerInstance> Create() const;
 };

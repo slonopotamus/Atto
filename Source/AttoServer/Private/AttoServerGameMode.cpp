@@ -25,8 +25,7 @@ void AAttoServerGameMode::InitGame(const FString& MapName, const FString& Option
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
 
-	const uint32 Port = UGameplayStatics::GetIntOption(OptionsString, TEXT("Port"), Atto::DefaultPort);
-	AttoServer = FAttoServer().Listen(Port);
+	AttoServer = FAttoServer().WithOptions(OptionsString).Create();
 }
 
 void AAttoServerGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)

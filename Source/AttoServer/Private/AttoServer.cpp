@@ -2,6 +2,7 @@
 
 #include "AttoCommon.h"
 #include "Containers/BackgroundableTicker.h"
+#include "Kismet/GameplayStatics.h"
 
 // Work around a conflict between a UI namespace defined by engine code and a typedef in OpenSSL
 #define UI UI_ST
@@ -19,6 +20,7 @@ static int AttoServerCallback(lws* Wsi, const lws_callback_reasons Reason, void*
 	FAttoServerSession* Session = static_cast<FAttoServerSession*>(User);
 	const lws_protocols* Protocol = lws_get_protocol(Wsi);
 	FAttoServerInstance* Server = static_cast<FAttoServerInstance*>(Protocol->user);
+
 	if (ensure(Session) && ensure(Server))
 	{
 		switch (Reason)
@@ -48,14 +50,14 @@ static int AttoServerCallback(lws* Wsi, const lws_callback_reasons Reason, void*
 	return lws_callback_http_dummy(Wsi, Reason, User, In, Len);
 }
 
-FAttoServerInstance::FAttoServerInstance()
+FAttoServerInstance::FAttoServerInstance(const FAttoServer& Config)
 {
 	Protocols = new lws_protocols[2];
 	Protocols[0] = {
 	    .name = Atto::Protocol,
 	    .callback = AttoServerCallback,
 	    .per_session_data_size = sizeof(FAttoServerSession),
-	    .rx_buffer_size = 65536,
+	    .rx_buffer_size = Config.ReceiveBufferSize,
 	    .user = this,
 	};
 	Protocols[1] = {};
@@ -90,13 +92,19 @@ bool FAttoServerInstance::Tick(float DeltaSeconds)
 	return true;
 }
 
-TUniquePtr<FAttoServerInstance> FAttoServer::Listen(const uint32 Port) const
+FAttoServer& FAttoServer::WithOptions(const FString& OptionsString) &&
 {
-	auto Result = TUniquePtr<FAttoServerInstance>(new FAttoServerInstance{});
+	ListenPort = UGameplayStatics::GetIntOption(OptionsString, TEXT("Port"), Atto::DefaultPort);
+	return *this;
+}
+
+TUniquePtr<FAttoServerInstance> FAttoServer::Create() const
+{
+	auto Result = TUniquePtr<FAttoServerInstance>(new FAttoServerInstance{*this});
 
 	const auto BindAddressAnsi = StringCast<ANSICHAR>(*BindAddress.Get(TEXT("")));
 	const lws_context_creation_info ContextCreationInfo = {
-	    .port = static_cast<int>(Port),
+	    .port = static_cast<int>(ListenPort),
 	    .iface = BindAddress ? BindAddressAnsi.Get() : nullptr,
 	    .protocols = Result->Protocols,
 	    .gid = -1,
