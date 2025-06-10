@@ -1,7 +1,6 @@
 #pragma once
 
 #include "AttoCommon.h"
-#include <span>
 
 class FAttoServer;
 struct lws;
