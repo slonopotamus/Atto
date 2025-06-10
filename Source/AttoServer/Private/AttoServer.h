@@ -26,8 +26,6 @@ class FAttoConnection final : public FNoncopyable
 
 	TQueue<FAttoMessage> ReceiveQueue;
 
-	void Send(const void* Data, const size_t Size, EAttoMessageType Type);
-
 public:
 	explicit FAttoConnection(lws* LwsConnection)
 	    : LwsConnection(LwsConnection)
@@ -35,6 +33,8 @@ public:
 	}
 
 	void Send(const FString& Message);
+
+	void Send(const void* Data, const size_t Size, EAttoMessageType Type);
 
 	void SendFromQueueInternal();
 
