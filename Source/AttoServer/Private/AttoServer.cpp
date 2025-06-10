@@ -11,43 +11,121 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 #undef UI
 
-struct FAttoServerSession
+void FAttoConnection::Send(const FString& Message)
 {
-};
+	const auto Converted = StringCast<UTF8CHAR>(*Message);
+	Send(std::span{reinterpret_cast<const uint8*>(Converted.Get()), static_cast<size_t>(Converted.Length())}, EAttoMessageType::Text);
+}
 
-static int AttoServerCallback(lws* Wsi, const lws_callback_reasons Reason, void* User, void* In, const size_t Len)
+void FAttoConnection::Send(const unsigned char* Data, const size_t Size, const EAttoMessageType Type)
 {
-	FAttoServerSession* Session = static_cast<FAttoServerSession*>(User);
-	const lws_protocols* Protocol = lws_get_protocol(Wsi);
-	FAttoServerInstance* Server = static_cast<FAttoServerInstance*>(Protocol->user);
-
-	if (ensure(Session) && ensure(Server))
+	if (!ensure(Data))
 	{
-		switch (Reason)
+		return;
+	}
+
+	TArray<unsigned char> Payload;
+
+	Payload.Reserve(LWS_PRE + Size);
+	Payload.AddDefaulted(LWS_PRE);
+	Payload.Append(Data, Size);
+
+	SendQueue.Enqueue({
+	    .Payload = MoveTemp(Payload),
+	    .Type = Type,
+	});
+
+	lws_callback_on_writable(LwsConnection);
+}
+
+void FAttoConnection::SendFromQueueInternal()
+{
+	if (auto* Message = SendQueue.Peek(); ensure(Message))
+	{
+		const auto Mode = Message->Type == EAttoMessageType::Text ? LWS_WRITE_TEXT : LWS_WRITE_BINARY;
+		const auto Size = Message->Payload.Num() - LWS_PRE;
+		// TODO: Implement partial write
+		ensure(lws_write(LwsConnection, Message->Payload.GetData() + LWS_PRE, Size, Mode) == Size);
+		SendQueue.Pop();
+	}
+
+	if (!SendQueue.IsEmpty())
+	{
+		lws_callback_on_writable(LwsConnection);
+	}
+}
+
+void FAttoConnection::HandleMessage(const std::span<const unsigned char>& Data)
+{
+	ensure(false);
+}
+
+void FAttoConnection::HandleMessage(const FString& Message)
+{
+	if (ensure(Message == TEXT("Ping")))
+	{
+		Send(TEXT("Pong"));
+	}
+}
+
+static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Reason, void* User, void* In, const size_t Len)
+{
+	if (const lws_protocols* Protocol = lws_get_protocol(LwsConnection))
+	{
+		auto* Session = static_cast<FAttoConnection*>(User);
+
+		if (auto* Server = static_cast<FAttoServerInstance*>(Protocol->user); ensure(Server))
 		{
-			case LWS_CALLBACK_ESTABLISHED:
+			switch (Reason)
 			{
-				break;
-			}
+				case LWS_CALLBACK_ESTABLISHED:
+				{
+					if (ensure(Session))
+					{
+						Server->Connections.Add(new (Session) FAttoConnection{LwsConnection});
+					}
+					break;
+				}
 
-			case LWS_CALLBACK_CLOSED:
-			{
-				break;
-			}
+				case LWS_CALLBACK_CLOSED:
+				{
+					if (ensure(Session))
+					{
+						Server->Connections.Remove(Session);
+						Session->~FAttoConnection();
+					}
 
-			case LWS_CALLBACK_RECEIVE:
-			{
-				break;
-			}
+					break;
+				}
 
-			case LWS_CALLBACK_SERVER_WRITEABLE:
-			{
-				break;
+				case LWS_CALLBACK_RECEIVE:
+				{
+					// TODO: Implement partial read
+					if (ensure(lws_is_final_fragment(LwsConnection)))
+					{
+						if (lws_frame_is_binary(LwsConnection))
+						{
+							Session->HandleMessage(std::span{static_cast<const unsigned char*>(In), Len});
+						}
+						else
+						{
+							const auto Message = StringCast<TCHAR>(static_cast<const char*>(In), Len);
+							Session->HandleMessage(FString{Message.Get(), Message.Length()});
+						}
+					}
+					break;
+				}
+
+				case LWS_CALLBACK_SERVER_WRITEABLE:
+				{
+					Session->SendFromQueueInternal();
+					break;
+				}
 			}
 		}
 	}
 
-	return lws_callback_http_dummy(Wsi, Reason, User, In, Len);
+	return lws_callback_http_dummy(LwsConnection, Reason, User, In, Len);
 }
 
 FAttoServerInstance::FAttoServerInstance(const FAttoServer& Config)
@@ -56,12 +134,13 @@ FAttoServerInstance::FAttoServerInstance(const FAttoServer& Config)
 	Protocols[0] = {
 	    .name = Atto::Protocol,
 	    .callback = AttoServerCallback,
-	    .per_session_data_size = sizeof(FAttoServerSession),
+	    .per_session_data_size = sizeof(FAttoConnection),
 	    .rx_buffer_size = Config.ReceiveBufferSize,
 	    .user = this,
 	};
 	Protocols[1] = {};
 
+	// TODO: Move libwebsocket activity off game thread and only do message handling on it?
 	TickerHandle = FTSBackgroundableTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &ThisClass::Tick));
 }
 

@@ -37,6 +37,7 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 			// TODO: Fill user id
 			const auto UserId = FUniqueNetIdAtto::Create(1);
 			Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
+			LocalUsers.Add(LocalUserNum, UserId);
 			TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
 			Subsystem.AttoClient->OnConnected.Remove(*DelegateHandle);
 		};

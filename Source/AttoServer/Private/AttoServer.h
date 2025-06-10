@@ -1,8 +1,53 @@
 #pragma once
 
 #include "AttoCommon.h"
+#include <span>
 
 class FAttoServer;
+struct lws;
+
+enum class EAttoMessageType : uint8
+{
+	Text,
+	Binary,
+};
+
+struct FAttoMessage final
+{
+	TArray<unsigned char> Payload;
+	EAttoMessageType Type = EAttoMessageType::Binary;
+};
+
+class FAttoConnection final : public FNoncopyable
+{
+	lws* const LwsConnection;
+
+	TQueue<FAttoMessage> SendQueue;
+
+	TQueue<FAttoMessage> ReceiveQueue;
+
+	void Send(const unsigned char* Data, const size_t Size, EAttoMessageType Type);
+
+public:
+	explicit FAttoConnection(lws* LwsConnection)
+	    : LwsConnection(LwsConnection)
+	{
+	}
+
+	void Send(const FString& Message);
+
+	template<typename T>
+	void Send(const std::span<T>& Data, const EAttoMessageType Type)
+	{
+		Send(Data.data(), Data.size_bytes(), Type);
+	}
+
+	void SendFromQueueInternal();
+
+	void HandleMessage(const std::span<const unsigned char>& Data);
+
+	void HandleMessage(const FString& Message);
+};
 
 class FAttoServerInstance final : FNoncopyable
 {
@@ -23,6 +68,8 @@ class FAttoServerInstance final : FNoncopyable
 	bool Tick(float DeltaSeconds);
 
 public:
+	TSet<FAttoConnection*> Connections;
+
 	~FAttoServerInstance();
 };
 
