@@ -24,8 +24,6 @@ class FAttoConnection final : public FNoncopyable
 
 	TQueue<FAttoMessage> SendQueue;
 
-	TQueue<FAttoMessage> ReceiveQueue;
-
 public:
 	explicit FAttoConnection(lws* LwsConnection)
 	    : LwsConnection(LwsConnection)
