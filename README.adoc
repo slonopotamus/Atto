@@ -1,0 +1,4 @@
+= Atto Server
+:source-highlighter: rouge
+
+This is an Unreal Engine plugin that implements a minimalistic backend service.

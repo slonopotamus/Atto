@@ -26,7 +26,7 @@ class FAttoConnection final : public FNoncopyable
 
 	TQueue<FAttoMessage> ReceiveQueue;
 
-	void Send(const unsigned char* Data, const size_t Size, EAttoMessageType Type);
+	void Send(const void* Data, const size_t Size, EAttoMessageType Type);
 
 public:
 	explicit FAttoConnection(lws* LwsConnection)
@@ -36,17 +36,9 @@ public:
 
 	void Send(const FString& Message);
 
-	template<typename T>
-	void Send(const std::span<T>& Data, const EAttoMessageType Type)
-	{
-		Send(Data.data(), Data.size_bytes(), Type);
-	}
-
 	void SendFromQueueInternal();
 
-	void HandleMessage(const std::span<const unsigned char>& Data);
-
-	void HandleMessage(const FString& Message);
+	void HandleMessageInternal(const void* Data, const size_t Size);
 };
 
 class FAttoServerInstance final : FNoncopyable
@@ -100,7 +92,7 @@ public:
 		return *this;
 	}
 
-	[[nodiscard]] FAttoServer& WithOptions(const FString& OptionsString) &&;
+	[[nodiscard]] FAttoServer& WithCommandLineOptions() &&;
 
 	[[nodiscard]] TUniquePtr<FAttoServerInstance> Create() const;
 };

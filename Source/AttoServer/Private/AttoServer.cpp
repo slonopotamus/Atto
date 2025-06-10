@@ -2,7 +2,6 @@
 
 #include "AttoCommon.h"
 #include "Containers/BackgroundableTicker.h"
-#include "Kismet/GameplayStatics.h"
 
 // Work around a conflict between a UI namespace defined by engine code and a typedef in OpenSSL
 #define UI UI_ST
@@ -11,13 +10,7 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 #undef UI
 
-void FAttoConnection::Send(const FString& Message)
-{
-	const auto Converted = StringCast<UTF8CHAR>(*Message);
-	Send(std::span{reinterpret_cast<const uint8*>(Converted.Get()), static_cast<size_t>(Converted.Length())}, EAttoMessageType::Text);
-}
-
-void FAttoConnection::Send(const unsigned char* Data, const size_t Size, const EAttoMessageType Type)
+void FAttoConnection::Send(const void* Data, const size_t Size, const EAttoMessageType Type)
 {
 	if (!ensure(Data))
 	{
@@ -28,7 +21,7 @@ void FAttoConnection::Send(const unsigned char* Data, const size_t Size, const E
 
 	Payload.Reserve(LWS_PRE + Size);
 	Payload.AddDefaulted(LWS_PRE);
-	Payload.Append(Data, Size);
+	Payload.Append(static_cast<const unsigned char*>(Data), Size);
 
 	SendQueue.Enqueue({
 	    .Payload = MoveTemp(Payload),
@@ -36,6 +29,12 @@ void FAttoConnection::Send(const unsigned char* Data, const size_t Size, const E
 	});
 
 	lws_callback_on_writable(LwsConnection);
+}
+
+void FAttoConnection::Send(const FString& Message)
+{
+	const FTCHARToUTF8 Converted{Message};
+	Send(Converted.Get(), Converted.Length(), EAttoMessageType::Text);
 }
 
 void FAttoConnection::SendFromQueueInternal()
@@ -55,16 +54,20 @@ void FAttoConnection::SendFromQueueInternal()
 	}
 }
 
-void FAttoConnection::HandleMessage(const std::span<const unsigned char>& Data)
+void FAttoConnection::HandleMessageInternal(const void* Data, const size_t Size)
 {
-	ensure(false);
-}
-
-void FAttoConnection::HandleMessage(const FString& Message)
-{
-	if (ensure(Message == TEXT("Ping")))
+	if (lws_frame_is_binary(LwsConnection))
 	{
-		Send(TEXT("Pong"));
+		// TODO
+	}
+	else
+	{
+		const FUTF8ToTCHAR Converted{static_cast<const ANSICHAR*>(Data), static_cast<int32>(Size)};
+		const FString Message{Converted.Get(), Converted.Length()};
+		if (ensureMsgf(Message == TEXT("Ping"), TEXT("Expected 'Ping' but got '%s'"), *Message))
+		{
+			Send(TEXT("Pong"));
+		}
 	}
 }
 
@@ -103,15 +106,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 					// TODO: Implement partial read
 					if (ensure(lws_is_final_fragment(LwsConnection)))
 					{
-						if (lws_frame_is_binary(LwsConnection))
-						{
-							Session->HandleMessage(std::span{static_cast<const unsigned char*>(In), Len});
-						}
-						else
-						{
-							const auto Message = StringCast<TCHAR>(static_cast<const char*>(In), Len);
-							Session->HandleMessage(FString{Message.Get(), Message.Length()});
-						}
+						Session->HandleMessageInternal(In, Len);
 					}
 					break;
 				}
@@ -129,7 +124,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 }
 
 FAttoServerInstance::FAttoServerInstance(const FAttoServer& Config)
-    : Protocols(new lws_protocols[2])
+    : Protocols{new lws_protocols[2]}
 {
 	Protocols[0] = {
 	    .name = Atto::Protocol,
@@ -161,7 +156,7 @@ FAttoServerInstance::~FAttoServerInstance()
 		Context = nullptr;
 	}
 
-	delete Protocols;
+	delete[] Protocols;
 	Protocols = nullptr;
 }
 
@@ -171,9 +166,10 @@ bool FAttoServerInstance::Tick(float DeltaSeconds)
 	return true;
 }
 
-FAttoServer& FAttoServer::WithOptions(const FString& OptionsString) &&
+FAttoServer& FAttoServer::WithCommandLineOptions() &&
 {
-	ListenPort = UGameplayStatics::GetIntOption(OptionsString, TEXT("Port"), Atto::DefaultPort);
+	// TODO: Also make client port respect this
+	FParse::Value(FCommandLine::Get(), TEXT("AttoPort"), ListenPort);
 	return *this;
 }
 
