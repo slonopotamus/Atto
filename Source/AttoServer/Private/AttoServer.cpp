@@ -129,8 +129,8 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 }
 
 FAttoServerInstance::FAttoServerInstance(const FAttoServer& Config)
+    : Protocols(new lws_protocols[2])
 {
-	Protocols = new lws_protocols[2];
 	Protocols[0] = {
 	    .name = Atto::Protocol,
 	    .callback = AttoServerCallback,
