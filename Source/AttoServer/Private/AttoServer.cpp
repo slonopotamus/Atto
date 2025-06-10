@@ -113,7 +113,10 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 
 				case LWS_CALLBACK_SERVER_WRITEABLE:
 				{
-					Session->SendFromQueueInternal();
+					if (ensure(Session))
+					{
+						Session->SendFromQueueInternal();
+					}
 					break;
 				}
 			}
