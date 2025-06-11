@@ -1,5 +1,4 @@
 #include "AttoServer.h"
-
 #include "AttoCommon.h"
 #include "Containers/BackgroundableTicker.h"
 

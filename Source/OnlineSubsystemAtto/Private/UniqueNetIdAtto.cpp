@@ -1,5 +1,4 @@
 #include "UniqueNetIdAtto.h"
-
 #include "OnlineSubsystemAtto.h"
 
 FUniqueNetIdAtto FUniqueNetIdAtto::Invalid;

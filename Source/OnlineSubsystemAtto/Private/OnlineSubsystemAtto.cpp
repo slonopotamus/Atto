@@ -1,5 +1,4 @@
 #include "OnlineSubsystemAtto.h"
-
 #include "OnlineAsyncTaskManagerAtto.h"
 #include "OnlineIdentityAtto.h"
 #include "OnlineSessionAtto.h"

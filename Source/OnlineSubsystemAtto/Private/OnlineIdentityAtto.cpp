@@ -1,5 +1,4 @@
 #include "OnlineIdentityAtto.h"
-
 #include "AttoClient.h"
 #include "AttoCommon.h"
 #include "OnlineAsyncTaskManagerAtto.h"
@@ -25,12 +24,10 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 	if (!Subsystem.AttoClient)
 	{
 		Subsystem.AttoClient = MakeShared<FAttoClient>(FString::Printf(TEXT("ws://localhost:%d"), Atto::DefaultPort));
-		Subsystem.AttoClient->OnConnectionError.AddLambda([](const FString& Error)
-		                                                  { UE_LOG(LogAtto, Error, TEXT("%s"), *Error); });
+		Subsystem.AttoClient->OnConnectionError.AddLambda([](const FString& Error) { UE_LOG(LogAtto, Error, TEXT("%s"), *Error); });
 	}
 
-	Subsystem.TaskManager->AddGenericToInQueue([this, LocalUserNum]
-	                                           {
+	Subsystem.TaskManager->AddGenericToInQueue([this, LocalUserNum] {
 		TSharedPtr<FDelegateHandle> DelegateHandle = MakeShared<FDelegateHandle>();
 		auto OnConnected = [this, LocalUserNum, DelegateHandle]
 		{

@@ -1,21 +1,18 @@
 #include "AttoClient.h"
-
 #include "AttoCommon.h"
 #include "WebSocketsModule.h"
 
 FAttoClient::FAttoClient(const FString& Url)
     : WebSocket{FWebSocketsModule::Get().CreateWebSocket(Url, Atto::Protocol)}
 {
-	WebSocket->OnConnected().AddLambda([&]
-	                                   {
+	WebSocket->OnConnected().AddLambda([&] {
 		OnConnected.Broadcast();
-		WebSocket->Send(TEXT("Ping")); });
+		WebSocket->Send(TEXT("Ping"));
+	});
 
-	WebSocket->OnClosed().AddLambda([&](int32 StatusCode, const FString& Reason, bool bWasClean)
-	                                { OnDisconnected.Broadcast(Reason, bWasClean); });
+	WebSocket->OnClosed().AddLambda([&](int32 StatusCode, const FString& Reason, bool bWasClean) { OnDisconnected.Broadcast(Reason, bWasClean); });
 
-	WebSocket->OnConnectionError().AddLambda([&](const FString& Error)
-	                                         { OnConnectionError.Broadcast(Error); });
+	WebSocket->OnConnectionError().AddLambda([&](const FString& Error) { OnConnectionError.Broadcast(Error); });
 
 	WebSocket->OnMessage().AddRaw(this, &ThisClass::OnMessage);
 }
