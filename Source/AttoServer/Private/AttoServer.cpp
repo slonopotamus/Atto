@@ -63,7 +63,7 @@ void FAttoConnection::HandleMessageInternal(const void* Data, const size_t Size)
 	else
 	{
 		const FUTF8ToTCHAR Converted{static_cast<const ANSICHAR*>(Data), static_cast<int32>(Size)};
-		const FString Message{Converted.Get(), Converted.Length()};
+		const FString Message{Converted.Length(), Converted.Get()};
 		if (ensureMsgf(Message == TEXT("Ping"), TEXT("Expected 'Ping' but got '%s'"), *Message))
 		{
 			Send(TEXT("Pong"));
