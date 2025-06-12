@@ -27,17 +27,15 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 		Subsystem.AttoClient->OnConnectionError.AddLambda([](const FString& Error) { UE_LOG(LogAtto, Error, TEXT("%s"), *Error); });
 	}
 
-	Subsystem.TaskManager->AddGenericToInQueue([this, LocalUserNum] {
+	Subsystem.TaskManager->AddGenericToInQueue([=, this] {
 		TSharedPtr<FDelegateHandle> OnConnectedDelegateHandle = MakeShared<FDelegateHandle>();
-		auto OnConnected = [this, OnConnectedDelegateHandle, LocalUserNum]
-		{
+		auto OnConnected = [=, this] {
 			Subsystem.AttoClient->OnConnected.Remove(*OnConnectedDelegateHandle);
 			
 			TSharedPtr<FDelegateHandle> OnLoginDelegateHandle = MakeShared<FDelegateHandle>();
 			
 			// TODO: Can we avoid nested lambdas?
-			auto OnLogin = [this, LocalUserNum, OnLoginDelegateHandle](const FAttoLoginResponse& LoginResponse)
-			{
+			auto OnLogin = [=, this](const FAttoLoginResponse& LoginResponse) {
 				Subsystem.AttoClient->OnLoginResponse.Remove(*OnLoginDelegateHandle);
 
 				// TODO: Rewrite this using Visit
@@ -57,7 +55,8 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 
 			// TODO: Also subscribe to OnConnectionError?
 			OnLoginDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnLoginResponse.AddLambda(OnLogin));
-			Subsystem.AttoClient->LoginAsync();
+			// TODO: Is AccountCredentials properly captured (by value)?
+			Subsystem.AttoClient->LoginAsync(AccountCredentials.Id, AccountCredentials.Token);
 		};
 		
 		if (Subsystem.AttoClient->IsConnected())

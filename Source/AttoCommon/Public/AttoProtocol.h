@@ -2,10 +2,15 @@
 
 struct FAttoLoginRequest
 {
+	FString Username;
+	FString Password;
 	// TODO: Pass credentials
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoLoginRequest& Message)
 	{
+		Ar << Message.Username;
+		Ar << Message.Password;
+
 		return Ar;
 	}
 };

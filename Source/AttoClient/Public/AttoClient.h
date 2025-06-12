@@ -31,7 +31,7 @@ public:
 
 	void Disconnect();
 
-	void LoginAsync();
+	void LoginAsync(FString Username, FString Password);
 
 	void LogoutAsync(uint64 UserId);
 

@@ -62,7 +62,10 @@ void FAttoConnection::SendFromQueueInternal()
 
 void FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
-	// TODO: Check credentials and such
+	// TODO: Check credentials
+	(void)Message.Username;
+	(void)Message.Password;
+
 	const auto Id = reinterpret_cast<uint64>(this);
 	UserId = Id;
 

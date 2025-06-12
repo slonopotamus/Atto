@@ -60,9 +60,9 @@ bool FAttoClient::IsConnected() const
 	return WebSocket->IsConnected();
 }
 
-void FAttoClient::LoginAsync()
+void FAttoClient::LoginAsync(FString Username, FString Password)
 {
-	Send<FAttoLoginRequest>();
+	Send<FAttoLoginRequest>(MoveTemp(Username), MoveTemp(Password));
 }
 
 void FAttoClient::LogoutAsync(const uint64 UserId)
