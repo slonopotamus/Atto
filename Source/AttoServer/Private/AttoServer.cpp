@@ -125,6 +125,10 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 						{
 							Visit([&](auto& Variant) { Session->operator()(Variant); }, Message);
 						}
+						else
+						{
+							// TODO: Maybe just disconnect them?
+						}
 					}
 					break;
 				}
