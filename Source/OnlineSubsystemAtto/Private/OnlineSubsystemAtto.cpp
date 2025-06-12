@@ -51,7 +51,7 @@ bool FOnlineSubsystemAtto::Shutdown()
 	return true;
 }
 
-bool FOnlineSubsystemAtto::Tick(float DeltaSeconds)
+bool FOnlineSubsystemAtto::Tick(const float DeltaSeconds)
 {
 	QUICK_SCOPE_CYCLE_COUNTER(STAT_FOnlineSubsystemAtto_Tick);
 
@@ -63,11 +63,6 @@ bool FOnlineSubsystemAtto::Tick(float DeltaSeconds)
 	if (TaskManager)
 	{
 		TaskManager->GameTick();
-	}
-
-	if (SessionInterface)
-	{
-		SessionInterface->Tick(DeltaSeconds);
 	}
 
 	return true;

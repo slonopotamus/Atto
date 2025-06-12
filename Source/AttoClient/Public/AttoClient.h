@@ -11,6 +11,14 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 
 	void operator()(const FAttoLoginResponse& Message);
 
+	void operator()(const FAttoLogoutResponse& Message);
+
+	void operator()(const FAttoCreateSessionResponse& Message);
+
+	void operator()(const FAttoDestroySessionResponse& Message);
+
+	void operator()(const FAttoFindSessionsResponse& Message);
+
 	void Send(FAttoC2SProtocol&& Message);
 
 	template<
@@ -33,16 +41,34 @@ public:
 
 	void LoginAsync(FString Username, FString Password);
 
-	void LogoutAsync(uint64 UserId);
+	void LogoutAsync();
 
-	DECLARE_EVENT(FAttoClient, FAttoClientConnectedEvent);
-	FAttoClientConnectedEvent OnConnected;
+	void FindSessionsAsync(uint32 MaxResults);
 
-	DECLARE_EVENT_OneParam(FAttoClient, FAttoClientLoginEvent, const FAttoLoginResponse&);
-	FAttoClientLoginEvent OnLoginResponse;
+	void CreateSessionAsync(FAttoSessionInfo SessionInfo);
 
-	DECLARE_EVENT_TwoParams(FAttoClient, FAttoClientDisconnectedEvent, const FString& /* Reason */, bool /* bWasClean */);
-	FAttoClientDisconnectedEvent OnDisconnected;
+	void DestroySessionAsync();
+
+	DECLARE_EVENT(FAttoClient, FAttoConnectedEvent);
+	FAttoConnectedEvent OnConnected;
+
+	DECLARE_EVENT_OneParam(FAttoClient, FAttoLoginEvent, const FAttoLoginResponse&);
+	FAttoLoginEvent OnLoginResponse;
+
+	DECLARE_EVENT(FAttoClient, FAttoLogoutEvent);
+	FAttoLogoutEvent OnLogoutResponse;
+
+	DECLARE_EVENT_OneParam(FAttoClient, FAttoSessionCreatedEvent, bool /* bSuccess */);
+	FAttoSessionCreatedEvent OnCreateSessionResponse;
+
+	DECLARE_EVENT_OneParam(FAttoClient, FAttoSessionDestroyedEvent, bool /* bSuccess */);
+	FAttoSessionDestroyedEvent OnDestroySessionResponse;
+
+	DECLARE_EVENT_OneParam(FAttoClient, FAttoFindSessionsEvent, const FAttoFindSessionsResponse& /* Response */);
+	FAttoFindSessionsEvent OnFindSessionsResponse;
+
+	DECLARE_EVENT_TwoParams(FAttoClient, FAttoDisconnectedEvent, const FString& /* Reason */, bool /* bWasClean */);
+	FAttoDisconnectedEvent OnDisconnected;
 
 	DECLARE_EVENT_OneParam(FAttoClient, FAttoConnectionErrorEvent, const FString& /* Error */);
 	FAttoConnectionErrorEvent OnConnectionError;

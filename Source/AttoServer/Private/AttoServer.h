@@ -3,48 +3,13 @@
 #include "AttoCommon.h"
 #include "AttoProtocol.h"
 
+class FAttoConnection;
 class FAttoServer;
-struct lws;
 
-struct FAttoMessage final
+struct FAttoRegisteredUser
 {
-	TArray<unsigned char> Payload;
-	bool bIsBinary = false;
-};
-
-class FAttoConnection final : public FNoncopyable
-{
-	lws* const LwsConnection;
-
-	/** User id of currently logged-in user (if any) */
-	TOptional<uint64> UserId;
-
-	TQueue<FAttoMessage> SendQueue;
-
-	void Send(const void* Data, const size_t Size, bool bIsBinary);
-
-public:
-	explicit FAttoConnection(lws* LwsConnection)
-	    : LwsConnection(LwsConnection)
-	{
-	}
-
-	void Send(FAttoS2CProtocol&& Message);
-
-	template<
-	    typename V,
-	    typename... ArgTypes
-	        UE_REQUIRES(std::is_constructible_v<V, ArgTypes...>)>
-	void Send(ArgTypes&&... Args)
-	{
-		Send(FAttoS2CProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
-	}
-
-	void SendFromQueueInternal();
-
-	void operator()(const FAttoLoginRequest& Message);
-
-	void operator()(const FAttoLogoutRequest& Message);
+	uint64 UserId = 0;
+	FString Password;
 };
 
 class FAttoServerInstance final : FNoncopyable
@@ -66,7 +31,14 @@ class FAttoServerInstance final : FNoncopyable
 	bool Tick(float DeltaSeconds);
 
 public:
+	const uint32 MaxFindSessionsResults;
+
+	// TODO: Add persistent storage?
+	TMap<FString, FAttoRegisteredUser> RegisteredUsers;
+
 	TSet<FAttoConnection*> Connections;
+
+	TMap<uint64, FAttoSessionInfo> Sessions;
 
 	~FAttoServerInstance();
 };
@@ -78,6 +50,7 @@ class FAttoServer final
 	TOptional<FString> BindAddress;
 	uint32 ReceiveBufferSize = 65536;
 	uint32 ListenPort = Atto::DefaultPort;
+	uint32 MaxFindSessionsResults = 100;
 
 public:
 	[[nodiscard]] FAttoServer& WithBindAddress(FString InBindAddress) &&

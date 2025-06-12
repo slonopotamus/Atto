@@ -65,12 +65,47 @@ void FAttoClient::LoginAsync(FString Username, FString Password)
 	Send<FAttoLoginRequest>(MoveTemp(Username), MoveTemp(Password));
 }
 
-void FAttoClient::LogoutAsync(const uint64 UserId)
+void FAttoClient::LogoutAsync()
 {
-	Send<FAttoLogoutRequest>(UserId);
+	Send<FAttoLogoutRequest>();
+}
+
+void FAttoClient::FindSessionsAsync(const uint32 MaxResults)
+{
+	Send<FAttoFindSessionsRequest>(MaxResults);
+}
+
+void FAttoClient::CreateSessionAsync(FAttoSessionInfo SessionInfo)
+{
+	Send<FAttoCreateSessionRequest>(MoveTemp(SessionInfo));
+}
+
+void FAttoClient::DestroySessionAsync()
+{
+	Send<FAttoDestroySessionRequest>();
 }
 
 void FAttoClient::operator()(const FAttoLoginResponse& Message)
 {
 	OnLoginResponse.Broadcast(Message);
+}
+
+void FAttoClient::operator()(const FAttoLogoutResponse& Message)
+{
+	OnLogoutResponse.Broadcast();
+}
+
+void FAttoClient::operator()(const FAttoCreateSessionResponse& Message)
+{
+	OnCreateSessionResponse.Broadcast(Message.bSuccess);
+}
+
+void FAttoClient::operator()(const FAttoDestroySessionResponse& Message)
+{
+	OnDestroySessionResponse.Broadcast(Message.bSuccess);
+}
+
+void FAttoClient::operator()(const FAttoFindSessionsResponse& Message)
+{
+	OnFindSessionsResponse.Broadcast(Message);
 }
