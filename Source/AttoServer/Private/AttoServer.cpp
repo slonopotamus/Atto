@@ -65,7 +65,7 @@ void FAttoConnection::operator()(const FAttoLoginRequest& Message)
 	// TODO: Check credentials and such
 	const auto Id = reinterpret_cast<uint64>(this);
 	UserId = Id;
-	
+
 	// TODO: TInPlaceType is weird
 	Send<FAttoLoginResponse>(TInPlaceType<uint64>(), Id);
 }
