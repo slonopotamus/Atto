@@ -190,6 +190,14 @@ void FOnlineIdentityAtto::GetUserPrivilege(const FUniqueNetId& LocalUserId, cons
 
 FPlatformUserId FOnlineIdentityAtto::GetPlatformUserIdFromUniqueNetId(const FUniqueNetId& UniqueNetId) const
 {
+	for (const auto& [LocalUserNum, LocalUserNetId] : LocalUsers)
+	{
+		if (*LocalUserNetId == UniqueNetId)
+		{
+			return GetPlatformUserIdFromLocalUserNum(LocalUserNum);
+		}
+	}
+
 	return PLATFORMUSERID_NONE;
 }
 
