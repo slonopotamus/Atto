@@ -1,4 +1,15 @@
 = Atto Server
 :source-highlighter: rouge
+:icons: font
 
-This is an Unreal Engine plugin that implements a minimalistic backend service.
+Atto is an Unreal Engine plugin that implements a minimalistic backend / meta service.
+
+IMPORTANT: Atto is not intended for high-load production use.
+The goal is to have _a_ service for early game development.
+
+== Features
+
+* Auto-starts in editor, so it is immediately available for PIE
+* Provides online subsystem implementation
+* Zero cloud dependencies
+* Absolutely free and open-source
