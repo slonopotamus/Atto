@@ -28,15 +28,36 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 	}
 
 	Subsystem.TaskManager->AddGenericToInQueue([this, LocalUserNum] {
-		TSharedPtr<FDelegateHandle> DelegateHandle = MakeShared<FDelegateHandle>();
-		auto OnConnected = [this, LocalUserNum, DelegateHandle]
+		TSharedPtr<FDelegateHandle> OnConnectedDelegateHandle = MakeShared<FDelegateHandle>();
+		auto OnConnected = [this, OnConnectedDelegateHandle, LocalUserNum]
 		{
-			// TODO: Fill user id
-			const auto UserId = FUniqueNetIdAtto::Create(1);
-			Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
-			LocalUsers.Add(LocalUserNum, UserId);
-			TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
-			Subsystem.AttoClient->OnConnected.Remove(*DelegateHandle);
+			Subsystem.AttoClient->OnConnected.Remove(*OnConnectedDelegateHandle);
+			
+			TSharedPtr<FDelegateHandle> OnLoginDelegateHandle = MakeShared<FDelegateHandle>();
+			
+			// TODO: Can we avoid nested lambdas?
+			auto OnLogin = [this, LocalUserNum, OnLoginDelegateHandle](const FAttoLoginResponse& LoginResponse)
+			{
+				Subsystem.AttoClient->OnLoginResponse.Remove(*OnLoginDelegateHandle);
+
+				// TODO: Rewrite this using Visit
+				if (const auto* UserIdPtr =  LoginResponse.TryGet<uint64>())
+				{
+					const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
+					Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
+					LocalUsers.Add(LocalUserNum, UserId);
+					TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
+				}
+				else
+				{
+					const auto& Error = LoginResponse.Get<FString>();
+					TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
+				}
+			};
+
+			// TODO: Also subscribe to OnConnectionError?
+			OnLoginDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnLoginResponse.AddLambda(OnLogin));
+			Subsystem.AttoClient->LoginAsync();
 		};
 		
 		if (Subsystem.AttoClient->IsConnected())
@@ -45,8 +66,8 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 		}
 		else
 		{
-			DelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnConnected.AddLambda(OnConnected));
-			Subsystem.AttoClient->Connect();
+			OnConnectedDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnConnected.AddLambda(OnConnected));
+			Subsystem.AttoClient->ConnectAsync();
 		} });
 
 	return true;

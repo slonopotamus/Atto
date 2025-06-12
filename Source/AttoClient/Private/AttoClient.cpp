@@ -1,5 +1,6 @@
 #include "AttoClient.h"
 #include "AttoCommon.h"
+#include "AttoProtocol.h"
 #include "WebSocketsModule.h"
 
 FAttoClient::FAttoClient(const FString& Url)
@@ -7,17 +8,31 @@ FAttoClient::FAttoClient(const FString& Url)
 {
 	WebSocket->OnConnected().AddLambda([&] {
 		OnConnected.Broadcast();
-		WebSocket->Send(TEXT("Ping"));
 	});
 
 	WebSocket->OnClosed().AddLambda([&](int32 StatusCode, const FString& Reason, bool bWasClean) { OnDisconnected.Broadcast(Reason, bWasClean); });
 
 	WebSocket->OnConnectionError().AddLambda([&](const FString& Error) { OnConnectionError.Broadcast(Error); });
 
-	WebSocket->OnMessage().AddRaw(this, &ThisClass::OnMessage);
+	WebSocket->OnBinaryMessage().AddLambda([&](const void* Data, const size_t Size, const bool bIsLastFragment) {
+		if (!ensure(bIsLastFragment))
+		{
+			return;
+		}
+
+		FBitReader Ar{static_cast<const uint8*>(Data), Size * 8};
+
+		FAttoS2CProtocol Message;
+		Ar << Message;
+
+		if (ensure(!Ar.IsError()))
+		{
+			Visit([&](auto& Variant) { this->operator()(Variant); }, Message);
+		}
+	});
 }
 
-void FAttoClient::Connect()
+void FAttoClient::ConnectAsync()
 {
 	WebSocket->Connect();
 }
@@ -27,17 +42,30 @@ void FAttoClient::Disconnect()
 	WebSocket->Close();
 }
 
+void FAttoClient::Send(FAttoC2SProtocol&& Message)
+{
+	// TODO: Store writer between calls to reduce allocations?
+	FBitWriter Ar{0, true};
+
+	Ar << Message;
+
+	if (ensure(!Ar.IsError()))
+	{
+		WebSocket->Send(Ar.GetData(), Ar.GetNumBytes(), true);
+	}
+}
+
 bool FAttoClient::IsConnected() const
 {
 	return WebSocket->IsConnected();
 }
 
-void FAttoClient::OnMessage(const FString& Message)
+void FAttoClient::LoginAsync()
 {
-	UE_LOG(LogTemp, Error, TEXT("%s"), *Message);
+	Send<FAttoLoginRequest>();
 }
 
-void FAttoClient::Send(const FString& Message)
+void FAttoClient::operator()(const FAttoLoginResponse& Message)
 {
-	WebSocket->Send(Message);
+	OnLoginResponse.Broadcast(Message);
 }

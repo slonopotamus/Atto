@@ -9,7 +9,7 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 #undef UI
 
-void FAttoConnection::Send(const void* Data, const size_t Size, const EAttoMessageType Type)
+void FAttoConnection::Send(const void* Data, const size_t Size, const bool bIsBinary)
 {
 	if (!ensure(Data))
 	{
@@ -24,23 +24,30 @@ void FAttoConnection::Send(const void* Data, const size_t Size, const EAttoMessa
 
 	SendQueue.Enqueue({
 	    .Payload = MoveTemp(Payload),
-	    .Type = Type,
+	    .bIsBinary = bIsBinary,
 	});
 
 	lws_callback_on_writable(LwsConnection);
 }
 
-void FAttoConnection::Send(const FString& Message)
+void FAttoConnection::Send(FAttoS2CProtocol&& Message)
 {
-	const FTCHARToUTF8 Converted{Message};
-	Send(Converted.Get(), Converted.Length(), EAttoMessageType::Text);
+	// TODO: Store writer between calls to reduce allocations?
+	FBitWriter Ar{0, true};
+
+	Ar << Message;
+
+	if (ensure(!Ar.IsError()))
+	{
+		Send(Ar.GetData(), Ar.GetNumBytes(), true);
+	}
 }
 
 void FAttoConnection::SendFromQueueInternal()
 {
 	if (auto* Message = SendQueue.Peek(); ensure(Message))
 	{
-		const auto Mode = Message->Type == EAttoMessageType::Text ? LWS_WRITE_TEXT : LWS_WRITE_BINARY;
+		const auto Mode = Message->bIsBinary ? LWS_WRITE_BINARY : LWS_WRITE_TEXT;
 		const auto Size = Message->Payload.Num() - LWS_PRE;
 		// TODO: Implement partial write
 		ensure(lws_write(LwsConnection, Message->Payload.GetData() + LWS_PRE, Size, Mode) == Size);
@@ -53,21 +60,14 @@ void FAttoConnection::SendFromQueueInternal()
 	}
 }
 
-void FAttoConnection::HandleMessageInternal(const void* Data, const size_t Size)
+void FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
-	if (lws_frame_is_binary(LwsConnection))
-	{
-		// TODO
-	}
-	else
-	{
-		const FUTF8ToTCHAR Converted{static_cast<const ANSICHAR*>(Data), static_cast<int32>(Size)};
-		const FString Message{Converted.Length(), Converted.Get()};
-		if (ensureMsgf(Message == TEXT("Ping"), TEXT("Expected 'Ping' but got '%s'"), *Message))
-		{
-			Send(TEXT("Pong"));
-		}
-	}
+	// TODO: Check credentials and such
+	const auto Id = reinterpret_cast<uint64>(this);
+	UserId = Id;
+	
+	// TODO: TInPlaceType is weird
+	Send<FAttoLoginResponse>(TInPlaceType<uint64>(), Id);
 }
 
 static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Reason, void* User, void* In, const size_t Len)
@@ -103,9 +103,17 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 				case LWS_CALLBACK_RECEIVE:
 				{
 					// TODO: Implement partial read
-					if (ensure(lws_is_final_fragment(LwsConnection)))
+					if (ensure(lws_is_final_fragment(LwsConnection)) && lws_frame_is_binary(LwsConnection))
 					{
-						Session->HandleMessageInternal(In, Len);
+						FBitReader Ar{static_cast<const uint8*>(In), Len * 8};
+
+						FAttoC2SProtocol Message;
+						Ar << Message;
+
+						if (ensure(!Ar.IsError()))
+						{
+							Visit([&](auto& Variant) { Session->operator()(Variant); }, Message);
+						}
 					}
 					break;
 				}

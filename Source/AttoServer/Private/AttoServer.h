@@ -1,27 +1,27 @@
 #pragma once
 
 #include "AttoCommon.h"
+#include "AttoProtocol.h"
 
 class FAttoServer;
 struct lws;
 
-enum class EAttoMessageType : uint8
-{
-	Text,
-	Binary,
-};
-
 struct FAttoMessage final
 {
 	TArray<unsigned char> Payload;
-	EAttoMessageType Type = EAttoMessageType::Binary;
+	bool bIsBinary = false;
 };
 
 class FAttoConnection final : public FNoncopyable
 {
 	lws* const LwsConnection;
 
+	/** User id of currently logged-in user (if any) */
+	TOptional<uint64> UserId;
+
 	TQueue<FAttoMessage> SendQueue;
+
+	void Send(const void* Data, const size_t Size, bool bIsBinary);
 
 public:
 	explicit FAttoConnection(lws* LwsConnection)
@@ -29,13 +29,20 @@ public:
 	{
 	}
 
-	void Send(const FString& Message);
+	void Send(FAttoS2CProtocol&& Message);
 
-	void Send(const void* Data, const size_t Size, EAttoMessageType Type);
+	template<
+	    typename V,
+	    typename... ArgTypes
+	        UE_REQUIRES(std::is_constructible_v<V, ArgTypes...>)>
+	void Send(ArgTypes&&... Args)
+	{
+		Send(FAttoS2CProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
+	}
 
 	void SendFromQueueInternal();
 
-	void HandleMessageInternal(const void* Data, const size_t Size);
+	void operator()(const FAttoLoginRequest& Message);
 };
 
 class FAttoServerInstance final : FNoncopyable
