@@ -4,8 +4,6 @@
 
 class FUniqueNetIdAtto final : public FUniqueNetId
 {
-	uint64 Value;
-
 	FUniqueNetIdAtto()
 	    : Value(0)
 	{
@@ -17,11 +15,11 @@ class FUniqueNetIdAtto final : public FUniqueNetId
 	}
 
 public:
-	static TSharedRef<const FUniqueNetId> Create(uint64 Value);
+	static TSharedRef<const FUniqueNetIdAtto> Create(uint64 Value);
 
-	static TSharedPtr<const FUniqueNetId> Create(const FString& Str);
+	static TSharedPtr<const FUniqueNetIdAtto> Create(const FString& Str);
 
-	static TSharedPtr<const FUniqueNetId> Create(const uint8* Bytes, int32 Size);
+	static TSharedPtr<const FUniqueNetIdAtto> Create(const uint8* Bytes, int32 Size);
 
 	static FUniqueNetIdAtto Invalid;
 
@@ -36,4 +34,6 @@ public:
 	virtual FString ToString() const override;
 
 	virtual FString ToDebugString() const override;
+
+	const uint64 Value;
 };

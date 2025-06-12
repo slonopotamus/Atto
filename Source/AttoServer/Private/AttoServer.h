@@ -43,6 +43,8 @@ public:
 	void SendFromQueueInternal();
 
 	void operator()(const FAttoLoginRequest& Message);
+
+	void operator()(const FAttoLogoutRequest& Message);
 };
 
 class FAttoServerInstance final : FNoncopyable

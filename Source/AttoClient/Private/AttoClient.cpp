@@ -65,6 +65,11 @@ void FAttoClient::LoginAsync()
 	Send<FAttoLoginRequest>();
 }
 
+void FAttoClient::LogoutAsync(const uint64 UserId)
+{
+	Send<FAttoLogoutRequest>(UserId);
+}
+
 void FAttoClient::operator()(const FAttoLoginResponse& Message)
 {
 	OnLoginResponse.Broadcast(Message);

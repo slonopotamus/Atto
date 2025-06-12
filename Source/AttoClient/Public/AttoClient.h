@@ -33,6 +33,8 @@ public:
 
 	void LoginAsync();
 
+	void LogoutAsync(uint64 UserId);
+
 	DECLARE_EVENT(FAttoClient, FAttoClientConnectedEvent);
 	FAttoClientConnectedEvent OnConnected;
 

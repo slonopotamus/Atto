@@ -70,6 +70,14 @@ void FAttoConnection::operator()(const FAttoLoginRequest& Message)
 	Send<FAttoLoginResponse>(TInPlaceType<uint64>(), Id);
 }
 
+void FAttoConnection::operator()(const FAttoLogoutRequest& Message)
+{
+	if (UserId == Message.UserId)
+	{
+		UserId.Reset();
+	}
+}
+
 static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Reason, void* User, void* In, const size_t Len)
 {
 	if (const lws_protocols* Protocol = lws_get_protocol(LwsConnection))

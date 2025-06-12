@@ -3,18 +3,18 @@
 
 FUniqueNetIdAtto FUniqueNetIdAtto::Invalid;
 
-TSharedRef<const FUniqueNetId> FUniqueNetIdAtto::Create(const uint64 Value)
+TSharedRef<const FUniqueNetIdAtto> FUniqueNetIdAtto::Create(const uint64 Value)
 {
 	return MakeShareable(new FUniqueNetIdAtto(Value));
 }
 
-TSharedPtr<const FUniqueNetId> FUniqueNetIdAtto::Create(const FString& Str)
+TSharedPtr<const FUniqueNetIdAtto> FUniqueNetIdAtto::Create(const FString& Str)
 {
 	const auto Value = FCString::Strtoui64(*Str, nullptr, 16);
 	return MakeShareable(new FUniqueNetIdAtto(Value));
 }
 
-TSharedPtr<const FUniqueNetId> FUniqueNetIdAtto::Create(const uint8* Bytes, const int32 Size)
+TSharedPtr<const FUniqueNetIdAtto> FUniqueNetIdAtto::Create(const uint8* Bytes, const int32 Size)
 {
 	if (Size != sizeof(decltype(Value)) || !ensure(Bytes))
 	{

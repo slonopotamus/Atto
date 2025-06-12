@@ -82,8 +82,15 @@ bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 		return false;
 	}
 
+	if (Subsystem.AttoClient)
+	{
+		Subsystem.AttoClient->LogoutAsync((*UserId)->Value);
+	}
+
 	Accounts.Remove(*UserId);
 	LocalUsers.Remove(LocalUserNum);
+
+	// TODO: Wait until logout actually completes? But why?
 	TriggerOnLogoutCompleteDelegates(LocalUserNum, true);
 
 	return true;

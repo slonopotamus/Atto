@@ -9,7 +9,7 @@ class FOnlineIdentityAtto final : public IOnlineIdentity
 {
 	FOnlineSubsystemAtto& Subsystem;
 
-	TMap<int32, TSharedRef<const FUniqueNetId>> LocalUsers;
+	TMap<int32, TSharedRef<const FUniqueNetIdAtto>> LocalUsers;
 	TMap<TSharedRef<const FUniqueNetId>, TSharedRef<FUserOnlineAccount>> Accounts;
 
 public:
