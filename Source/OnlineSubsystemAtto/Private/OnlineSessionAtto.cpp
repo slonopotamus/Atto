@@ -65,9 +65,8 @@ FNamedOnlineSession* FOnlineSessionAtto::AddNamedSession(const FName SessionName
 
 TSharedPtr<const FUniqueNetId> FOnlineSessionAtto::CreateSessionIdFromString(const FString& SessionIdStr)
 {
-	// TODO: Atto
-	ensure(false);
-	return nullptr;
+	// TODO: Use separate types for user ids and session ids?
+	return FUniqueNetIdAtto::Create(SessionIdStr);
 }
 
 FNamedOnlineSession* FOnlineSessionAtto::GetNamedSession(const FName SessionName)
