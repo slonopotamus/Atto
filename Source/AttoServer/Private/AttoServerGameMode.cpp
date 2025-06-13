@@ -2,5 +2,5 @@
 
 void AAttoServerGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
-	ErrorMessage = TEXT("No connections are not allowed");
+	ErrorMessage = TEXT("No connections are allowed");
 }
