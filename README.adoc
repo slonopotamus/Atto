@@ -13,3 +13,20 @@ The goal is to have _a_ service for early game development.
 * Provides online subsystem implementation
 * Zero cloud dependencies
 * Absolutely free and open-source
+
+== Supported Unreal OSS features
+
+* Identities (login, logout)
+* Sessions (create, start, end, destroy, find)
+
+== Command-line options
+
+`-DisableAttoServer`:: Disables AttoServer in cases where it would normally start (for example, in editor).
+
+`-EnableAttoServer`:: Enables AttoServer in cases where it would normally not start (for example, game client)
+
+`-AttoListenPort=27777`:: Specifies network port for Atto server
+
+`-AttoBindAddress=0.0.0.0`:: Specifies bind address for Atto server
+
+`-AttoUrl=ws://localhost:27777`:: Specifies Atto server address to connect to

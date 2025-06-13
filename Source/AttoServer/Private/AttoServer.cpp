@@ -123,8 +123,9 @@ bool FAttoServerInstance::Tick(float DeltaSeconds)
 
 FAttoServer& FAttoServer::WithCommandLineOptions() &&
 {
-	// TODO: Also make client port respect this
-	FParse::Value(FCommandLine::Get(), TEXT("AttoPort"), ListenPort);
+	ListenPort = Atto::GetPort();
+	BindAddress = Atto::GetBindAddress();
+
 	return *this;
 }
 
