@@ -7,7 +7,16 @@ bool UAttoServerSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 		return false;
 	}
 
-	// TODO: Improve this
+	if (FParse::Param(FCommandLine::Get(), TEXT("EnableAttoServer")))
+	{
+		return true;
+	}
+
+	if (FParse::Param(FCommandLine::Get(), TEXT("DisableAttoServer")))
+	{
+		return false;
+	}
+
 	return GIsEditor;
 }
 

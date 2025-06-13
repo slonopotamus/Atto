@@ -23,7 +23,8 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 
 	if (!Subsystem.AttoClient)
 	{
-		Subsystem.AttoClient = MakeShared<FAttoClient>(FString::Printf(TEXT("ws://localhost:%d"), Atto::DefaultPort));
+		auto ConnectUrl = Atto::GetConnectUrl();
+		Subsystem.AttoClient = MakeShared<FAttoClient>(MoveTemp(ConnectUrl));
 		Subsystem.AttoClient->OnConnectionError.AddLambda([](const FString& Error) { UE_LOG(LogAtto, Error, TEXT("%s"), *Error); });
 	}
 
