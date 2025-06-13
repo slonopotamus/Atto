@@ -42,22 +42,9 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 
 				case LWS_CALLBACK_RECEIVE:
 				{
-					// TODO: Implement partial read
-					if (ensure(lws_is_final_fragment(LwsConnection)) && lws_frame_is_binary(LwsConnection))
+					if (ensure(Connection))
 					{
-						FBitReader Ar{static_cast<const uint8*>(In), Len * 8};
-
-						FAttoC2SProtocol Message;
-						Ar << Message;
-
-						if (ensure(!Ar.IsError()))
-						{
-							Visit([&](auto& Variant) { Connection->operator()(Variant); }, Message);
-						}
-						else
-						{
-							// TODO: Maybe just disconnect them?
-						}
+						Connection->ReceiveInternal(In, Len);
 					}
 					break;
 				}

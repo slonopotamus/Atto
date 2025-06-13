@@ -16,7 +16,35 @@ FAttoConnection::~FAttoConnection()
 	}
 }
 
-void FAttoConnection::Send(const void* Data, const size_t Size, const bool bIsBinary)
+void FAttoConnection::ReceiveInternal(const void* Data, const size_t Size)
+{
+	if (!lws_frame_is_binary(LwsConnection))
+	{
+		return;
+	}
+
+	// TODO: Implement partial read
+	if (!ensure(lws_is_final_fragment(LwsConnection)))
+	{
+		return;
+	}
+
+	FBitReader Ar{static_cast<const uint8*>(Data), Size * 8};
+
+	FAttoC2SProtocol Message;
+	Ar << Message;
+
+	if (ensure(!Ar.IsError()))
+	{
+		Visit([&](auto& Variant) { operator()(Variant); }, Message);
+	}
+	else
+	{
+		// TODO: Maybe just disconnect them?
+	}
+}
+
+void FAttoConnection::Send(const void* Data, const size_t Size)
 {
 	if (!ensure(Data))
 	{
@@ -31,7 +59,6 @@ void FAttoConnection::Send(const void* Data, const size_t Size, const bool bIsBi
 
 	SendQueue.Enqueue({
 	    .Payload = MoveTemp(Payload),
-	    .bIsBinary = bIsBinary,
 	});
 
 	lws_callback_on_writable(LwsConnection);
@@ -46,7 +73,7 @@ void FAttoConnection::Send(FAttoS2CProtocol&& Message)
 
 	if (ensure(!Ar.IsError()))
 	{
-		Send(Ar.GetData(), Ar.GetNumBytes(), true);
+		Send(Ar.GetData(), Ar.GetNumBytes());
 	}
 }
 
@@ -54,10 +81,9 @@ void FAttoConnection::SendFromQueueInternal()
 {
 	if (auto* Message = SendQueue.Peek(); ensure(Message))
 	{
-		const auto Mode = Message->bIsBinary ? LWS_WRITE_BINARY : LWS_WRITE_TEXT;
 		const auto Size = Message->Payload.Num() - LWS_PRE;
 		// TODO: Implement partial write
-		ensure(lws_write(LwsConnection, Message->Payload.GetData() + LWS_PRE, Size, Mode) == Size);
+		ensure(lws_write(LwsConnection, Message->Payload.GetData() + LWS_PRE, Size, LWS_WRITE_BINARY) == Size);
 		SendQueue.Pop();
 	}
 

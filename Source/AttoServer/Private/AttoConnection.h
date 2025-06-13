@@ -9,7 +9,6 @@ struct lws;
 struct FAttoMessage final
 {
 	TArray<unsigned char> Payload;
-	bool bIsBinary = false;
 };
 
 class FAttoConnection final : public FNoncopyable
@@ -22,16 +21,7 @@ class FAttoConnection final : public FNoncopyable
 
 	TQueue<FAttoMessage> SendQueue;
 
-	void Send(const void* Data, const size_t Size, bool bIsBinary);
-
-public:
-	explicit FAttoConnection(FAttoServerInstance& Server, lws* LwsConnection)
-	    : Server(Server)
-	    , LwsConnection(LwsConnection)
-	{
-	}
-
-	~FAttoConnection();
+	void Send(const void* Data, size_t Size);
 
 	void Send(FAttoS2CProtocol&& Message);
 
@@ -44,8 +34,6 @@ public:
 		Send(FAttoS2CProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
 	}
 
-	void SendFromQueueInternal();
-
 	void operator()(const FAttoLoginRequest& Message);
 
 	void operator()(const FAttoLogoutRequest& Message);
@@ -55,4 +43,17 @@ public:
 	void operator()(const FAttoDestroySessionRequest& Message);
 
 	void operator()(const FAttoFindSessionsRequest& Message);
+
+public:
+	explicit FAttoConnection(FAttoServerInstance& Server, lws* LwsConnection)
+	    : Server(Server)
+	    , LwsConnection(LwsConnection)
+	{
+	}
+
+	~FAttoConnection();
+
+	void SendFromQueueInternal();
+
+	void ReceiveInternal(const void* Data, size_t Size);
 };
