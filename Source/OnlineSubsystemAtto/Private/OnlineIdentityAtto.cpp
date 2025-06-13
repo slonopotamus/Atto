@@ -83,7 +83,7 @@ bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 
 	if (Subsystem.AttoClient)
 	{
-		Subsystem.AttoClient->LogoutAsync((*UserId)->Value);
+		Subsystem.AttoClient->LogoutAsync();
 	}
 
 	Accounts.Remove(*UserId);

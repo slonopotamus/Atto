@@ -1,5 +1,6 @@
 #include "AttoServer.h"
 #include "AttoCommon.h"
+#include "AttoConnection.h"
 #include "Containers/BackgroundableTicker.h"
 
 // Work around a conflict between a UI namespace defined by engine code and a typedef in OpenSSL
@@ -9,83 +10,11 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 #undef UI
 
-void FAttoConnection::Send(const void* Data, const size_t Size, const bool bIsBinary)
-{
-	if (!ensure(Data))
-	{
-		return;
-	}
-
-	TArray<unsigned char> Payload;
-
-	Payload.Reserve(LWS_PRE + Size);
-	Payload.AddDefaulted(LWS_PRE);
-	Payload.Append(static_cast<const unsigned char*>(Data), Size);
-
-	SendQueue.Enqueue({
-	    .Payload = MoveTemp(Payload),
-	    .bIsBinary = bIsBinary,
-	});
-
-	lws_callback_on_writable(LwsConnection);
-}
-
-void FAttoConnection::Send(FAttoS2CProtocol&& Message)
-{
-	// TODO: Store writer between calls to reduce allocations?
-	FBitWriter Ar{0, true};
-
-	Ar << Message;
-
-	if (ensure(!Ar.IsError()))
-	{
-		Send(Ar.GetData(), Ar.GetNumBytes(), true);
-	}
-}
-
-void FAttoConnection::SendFromQueueInternal()
-{
-	if (auto* Message = SendQueue.Peek(); ensure(Message))
-	{
-		const auto Mode = Message->bIsBinary ? LWS_WRITE_BINARY : LWS_WRITE_TEXT;
-		const auto Size = Message->Payload.Num() - LWS_PRE;
-		// TODO: Implement partial write
-		ensure(lws_write(LwsConnection, Message->Payload.GetData() + LWS_PRE, Size, Mode) == Size);
-		SendQueue.Pop();
-	}
-
-	if (!SendQueue.IsEmpty())
-	{
-		lws_callback_on_writable(LwsConnection);
-	}
-}
-
-void FAttoConnection::operator()(const FAttoLoginRequest& Message)
-{
-	// TODO: Check credentials
-	(void)Message.Username;
-	(void)Message.Password;
-
-	const auto Id = reinterpret_cast<uint64>(this);
-	UserId = Id;
-
-	// TODO: TInPlaceType is weird
-	Send<FAttoLoginResponse>(TInPlaceType<uint64>(), Id);
-}
-
-void FAttoConnection::operator()(const FAttoLogoutRequest& Message)
-{
-	if (UserId == Message.UserId)
-	{
-		UserId.Reset();
-	}
-}
-
 static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Reason, void* User, void* In, const size_t Len)
 {
 	if (const lws_protocols* Protocol = lws_get_protocol(LwsConnection))
 	{
-		auto* Session = static_cast<FAttoConnection*>(User);
+		auto* Connection = static_cast<FAttoConnection*>(User);
 
 		if (auto* Server = static_cast<FAttoServerInstance*>(Protocol->user); ensure(Server))
 		{
@@ -93,19 +22,19 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 			{
 				case LWS_CALLBACK_ESTABLISHED:
 				{
-					if (ensure(Session))
+					if (ensure(Connection))
 					{
-						Server->Connections.Add(new (Session) FAttoConnection{LwsConnection});
+						Server->Connections.Add(new (Connection) FAttoConnection{*Server, LwsConnection});
 					}
 					break;
 				}
 
 				case LWS_CALLBACK_CLOSED:
 				{
-					if (ensure(Session))
+					if (ensure(Connection))
 					{
-						Server->Connections.Remove(Session);
-						Session->~FAttoConnection();
+						Server->Connections.Remove(Connection);
+						Connection->~FAttoConnection();
 					}
 
 					break;
@@ -123,7 +52,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 
 						if (ensure(!Ar.IsError()))
 						{
-							Visit([&](auto& Variant) { Session->operator()(Variant); }, Message);
+							Visit([&](auto& Variant) { Connection->operator()(Variant); }, Message);
 						}
 						else
 						{
@@ -135,9 +64,9 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 
 				case LWS_CALLBACK_SERVER_WRITEABLE:
 				{
-					if (ensure(Session))
+					if (ensure(Connection))
 					{
-						Session->SendFromQueueInternal();
+						Connection->SendFromQueueInternal();
 					}
 					break;
 				}
@@ -150,6 +79,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 
 FAttoServerInstance::FAttoServerInstance(const FAttoServer& Config)
     : Protocols{new lws_protocols[2]}
+    , MaxFindSessionsResults{Config.MaxFindSessionsResults}
 {
 	Protocols[0] = {
 	    .name = Atto::Protocol,

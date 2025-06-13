@@ -4,12 +4,26 @@
 #include "OnlineSessionSettings.h"
 
 class FOnlineSubsystemAtto;
+struct FAttoFindSessionsResponse;
 
 class FOnlineSessionAtto final : public IOnlineSession
 {
+	typedef FOnlineSessionAtto ThisClass;
+
 	FOnlineSubsystemAtto& Subsystem;
 
 	TMap<FName, FNamedOnlineSession> Sessions;
+
+	struct FAttoSessionSearchState
+	{
+		TSharedRef<FOnlineSessionSearch> SearchSettings;
+
+		FDelegateHandle OnFindSessionsResponseHandle;
+	};
+
+	TOptional<FAttoSessionSearchState> CurrentSessionSearch;
+
+	void OnFindSessionsResponse(const FAttoFindSessionsResponse& Message);
 
 protected:
 	virtual FNamedOnlineSession* AddNamedSession(FName SessionName, const FOnlineSessionSettings& SessionSettings) override;
@@ -21,8 +35,6 @@ public:
 	    : Subsystem(Subsystem)
 	{
 	}
-
-	void Tick(float DeltaSeconds);
 
 	virtual TSharedPtr<const FUniqueNetId> CreateSessionIdFromString(const FString& SessionIdStr) override;
 
