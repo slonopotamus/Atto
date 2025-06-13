@@ -366,7 +366,7 @@ bool FOnlineSessionAtto::JoinSession(const int32 LocalUserNum, const FName Sessi
 		return false;
 	}
 
-	if (!ensure(DesiredSession.Session.SessionInfo.IsValid()))
+	if (DesiredSession.Session.SessionInfo.IsValid())
 	{
 		TriggerOnJoinSessionCompleteDelegates(SessionName, EOnJoinSessionCompleteResult::CouldNotRetrieveAddress);
 		return false;
