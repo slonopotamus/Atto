@@ -30,6 +30,7 @@ If you're sure it's the latter, consider reporting it to https://github.com/slon
 * Persistent data storage
 * Implement more OSS interfaces
 * Add https://dev.epicgames.com/documentation/en-us/unreal-engine/online-services-in-unreal-engine[OnlineServices] implementation
+* Add API for game-specific logic
 
 [[command-line]]
 == Command-line options
