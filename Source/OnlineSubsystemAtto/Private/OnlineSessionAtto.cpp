@@ -151,6 +151,7 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 			    .SessionId = SessionId->Value,
 			    .BuildUniqueId = Session->SessionSettings.BuildUniqueId,
 			    .UpdatableInfo = FAttoSessionUpdatableInfo{*Session},
+			    .bIsDedicated = Session->SessionSettings.bIsDedicated,
 			});
 
 			TriggerOnCreateSessionCompleteDelegates(SessionName, true);

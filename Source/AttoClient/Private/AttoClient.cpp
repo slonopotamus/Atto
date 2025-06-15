@@ -71,9 +71,64 @@ void FAttoClient::LogoutAsync()
 	Send<FAttoLogoutRequest>();
 }
 
+template<typename T>
+static TOptional<FAttoFindSessionsParamValue> GetValueFromVariantData(const FVariantData& Data)
+{
+	T Result{};
+	Data.GetValue(Result);
+	return {FAttoFindSessionsParamValue{TInPlaceType<T>{}, Result}};
+}
+
+// FVariantData is just brain-damaged
+static TOptional<FAttoFindSessionsParamValue> ConvertVariantData(const FVariantData& Data)
+{
+	switch (Data.GetType())
+	{
+		case EOnlineKeyValuePairDataType::Empty:
+			// TODO: How to handle this?
+			return {};
+		case EOnlineKeyValuePairDataType::Int32:
+			return GetValueFromVariantData<int32>(Data);
+		case EOnlineKeyValuePairDataType::UInt32:
+			return GetValueFromVariantData<uint32>(Data);
+		case EOnlineKeyValuePairDataType::Int64:
+			return GetValueFromVariantData<int64>(Data);
+		case EOnlineKeyValuePairDataType::UInt64:
+			return GetValueFromVariantData<uint64>(Data);
+		case EOnlineKeyValuePairDataType::Double:
+			return GetValueFromVariantData<double>(Data);
+		case EOnlineKeyValuePairDataType::String:
+			return GetValueFromVariantData<FString>(Data);
+		case EOnlineKeyValuePairDataType::Float:
+			return GetValueFromVariantData<float>(Data);
+		case EOnlineKeyValuePairDataType::Blob:
+			return GetValueFromVariantData<TArray<uint8>>(Data);
+		case EOnlineKeyValuePairDataType::Bool:
+			return GetValueFromVariantData<bool>(Data);
+		case EOnlineKeyValuePairDataType::Json:
+			// TODO: Add support
+			ensureMsgf(false, TEXT("JSON is not supported"));
+			return {};
+		case EOnlineKeyValuePairDataType::MAX: [[fallthrough]];
+		default:
+			ensureMsgf(false, TEXT("Unknown EOnlineKeyValuePairDataType: %d"), Data.GetType());
+			return {};
+	}
+}
+
 void FAttoClient::FindSessionsAsync(const FOnlineSessionSearch& Search)
 {
-	Send<FAttoFindSessionsRequest>(Search.PlatformHash, Search.MaxSearchResults);
+	TMap<FName, FAttoFindSessionsParam> Params;
+
+	for (const auto& [Name, Value] : Search.QuerySettings.SearchParams)
+	{
+		if (const auto& ParamValue = ConvertVariantData(Value.Data))
+		{
+			Params.Add(Name, FAttoFindSessionsParam{Value.ComparisonOp, *ParamValue, Value.ID});
+		}
+	}
+
+	Send<FAttoFindSessionsRequest>(Params, Search.PlatformHash, Search.MaxSearchResults);
 }
 
 void FAttoClient::CreateSessionAsync(const FAttoSessionInfo& SessionInfo)
