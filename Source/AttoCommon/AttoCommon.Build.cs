@@ -8,6 +8,8 @@ public class AttoCommon : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"OnlineSubsystem",
+			"OnlineSubsystemUtils",
 		]);
 	}
 }
