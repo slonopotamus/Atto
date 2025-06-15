@@ -125,6 +125,7 @@ void FAttoConnection::operator()(const FAttoCreateSessionRequest& Message)
 	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
 	{
 		// TODO: Check if entry already exists?
+		// TODO: Should we allow to create multiple sessions simultaneously?
 		Server.Sessions.Add(*UserIdPtr, Message.SessionInfo);
 		bSuccess = true;
 	}
@@ -134,6 +135,26 @@ void FAttoConnection::operator()(const FAttoCreateSessionRequest& Message)
 	}
 
 	Send<FAttoCreateSessionResponse>(bSuccess);
+}
+
+void FAttoConnection::operator()(const FAttoUpdateSessionRequest& Message)
+{
+	bool bSuccess = false;
+
+	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
+	{
+		if (auto* Session = Server.Sessions.Find(*UserIdPtr))
+		{
+			Session->UpdatableInfo = Message.SessionInfo;
+			bSuccess = true;
+		}
+	}
+	else
+	{
+		// TODO: Disconnect them?
+	}
+
+	Send<FAttoUpdateSessionResponse>(bSuccess);
 }
 
 void FAttoConnection::operator()(const FAttoDestroySessionRequest& Message)
@@ -169,7 +190,10 @@ void FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 				break;
 			}
 
-			Sessions.Emplace(OwningUserId, Session);
+			if (Session.IsJoinable())
+			{
+				Sessions.Emplace(OwningUserId, Session);
+			}
 		}
 	}
 	else

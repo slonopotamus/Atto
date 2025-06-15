@@ -17,6 +17,8 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 
 	void operator()(const FAttoCreateSessionResponse& Message);
 
+	void operator()(const FAttoUpdateSessionResponse& Message);
+
 	void operator()(const FAttoDestroySessionResponse& Message);
 
 	void operator()(const FAttoFindSessionsResponse& Message);
@@ -47,7 +49,9 @@ public:
 
 	void FindSessionsAsync(const FOnlineSessionSearch& Search);
 
-	void CreateSessionAsync(FAttoSessionInfo SessionInfo);
+	void CreateSessionAsync(const FAttoSessionInfo& SessionInfo);
+
+	void UpdateSessionAsync(uint64 SessionId, const FAttoSessionUpdatableInfo& SessionInfo);
 
 	void DestroySessionAsync();
 
@@ -62,6 +66,9 @@ public:
 
 	DECLARE_EVENT_OneParam(FAttoClient, FAttoSessionCreatedEvent, bool /* bSuccess */);
 	FAttoSessionCreatedEvent OnCreateSessionResponse;
+
+	DECLARE_EVENT_OneParam(FAttoClient, FAttoSessionUpdatedEvent, bool /* bSuccess */);
+	FAttoSessionUpdatedEvent OnUpdateSessionResponse;
 
 	DECLARE_EVENT_OneParam(FAttoClient, FAttoSessionDestroyedEvent, bool /* bSuccess */);
 	FAttoSessionDestroyedEvent OnDestroySessionResponse;

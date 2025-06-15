@@ -76,9 +76,14 @@ void FAttoClient::FindSessionsAsync(const FOnlineSessionSearch& Search)
 	Send<FAttoFindSessionsRequest>(Search.PlatformHash, Search.MaxSearchResults);
 }
 
-void FAttoClient::CreateSessionAsync(FAttoSessionInfo SessionInfo)
+void FAttoClient::CreateSessionAsync(const FAttoSessionInfo& SessionInfo)
 {
-	Send<FAttoCreateSessionRequest>(MoveTemp(SessionInfo));
+	Send<FAttoCreateSessionRequest>(SessionInfo);
+}
+
+void FAttoClient::UpdateSessionAsync(uint64 SessionId, const FAttoSessionUpdatableInfo& SessionInfo)
+{
+	Send<FAttoUpdateSessionRequest>(SessionId, SessionInfo);
 }
 
 void FAttoClient::DestroySessionAsync()
@@ -99,6 +104,11 @@ void FAttoClient::operator()(const FAttoLogoutResponse& Message)
 void FAttoClient::operator()(const FAttoCreateSessionResponse& Message)
 {
 	OnCreateSessionResponse.Broadcast(Message.bSuccess);
+}
+
+void FAttoClient::operator()(const FAttoUpdateSessionResponse& Message)
+{
+	OnUpdateSessionResponse.Broadcast(Message.bSuccess);
 }
 
 void FAttoClient::operator()(const FAttoDestroySessionResponse& Message)

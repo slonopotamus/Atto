@@ -150,8 +150,7 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 			    .Port = HostAddress->GetPort(),
 			    .SessionId = SessionId->Value,
 			    .BuildUniqueId = Session->SessionSettings.BuildUniqueId,
-			    .NumPublicConnections = Session->SessionSettings.NumPublicConnections,
-			    .NumOpenPublicConnections = Session->NumOpenPublicConnections,
+			    .UpdatableInfo = FAttoSessionUpdatableInfo{*Session},
 			});
 
 			TriggerOnCreateSessionCompleteDelegates(SessionName, true);
@@ -180,7 +179,7 @@ bool FOnlineSessionAtto::StartSession(const FName SessionName)
 		if (Session->SessionState == EOnlineSessionState::Pending || Session->SessionState == EOnlineSessionState::Ended)
 		{
 			Session->SessionState = EOnlineSessionState::InProgress;
-			// TODO: Send update to AttoServer
+			UpdateSession(SessionName, Session->SessionSettings);
 			bSuccess = true;
 		}
 		else
@@ -206,7 +205,7 @@ bool FOnlineSessionAtto::EndSession(const FName SessionName)
 		if (Session->SessionState == EOnlineSessionState::InProgress)
 		{
 			Session->SessionState = EOnlineSessionState::Ended;
-			// TODO: Send update to AttoServer
+			UpdateSession(SessionName, Session->SessionSettings);
 			bSuccess = true;
 		}
 		else
@@ -242,23 +241,28 @@ bool FOnlineSessionAtto::DestroySession(const FName SessionName, const FOnDestro
 	return bSuccess;
 }
 
-bool FOnlineSessionAtto::UpdateSession(const FName SessionName, FOnlineSessionSettings& UpdatedSessionSettings, bool bShouldRefreshOnlineData)
+bool FOnlineSessionAtto::UpdateSession(const FName SessionName, FOnlineSessionSettings& UpdatedSessionSettings, const bool bShouldRefreshOnlineData)
 {
 	bool bSuccess = false;
 
 	if (auto* Session = GetNamedSession(SessionName))
 	{
+		// TODO: We're updating here what's not actually updatable via FAttoSessionUpdatableInfo...
 		Session->SessionSettings = UpdatedSessionSettings;
 
 		if (bShouldRefreshOnlineData)
 		{
-			// TODO: Send update to AttoServer
+			if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(Session->SessionInfo); ensure(SessionInfo))
+			{
+				Subsystem.AttoClient->UpdateSessionAsync(SessionInfo->SessionId->Value, FAttoSessionUpdatableInfo{*Session});
+			}
 		}
 
 		bSuccess = true;
 	}
 	else
 	{
+		// TODO: Log warning?
 	}
 
 	TriggerOnUpdateSessionCompleteDelegates(SessionName, bSuccess);
@@ -353,8 +357,7 @@ void FOnlineSessionAtto::OnFindSessionsResponse(const FAttoFindSessionsResponse&
 			ResultSession.Session.OwningUserId = FUniqueNetIdAtto::Create(Session.OwningUserId);
 			ResultSession.Session.SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, SessionAddress);
 			ResultSession.Session.SessionSettings.BuildUniqueId = Session.Info.BuildUniqueId;
-			ResultSession.Session.SessionSettings.NumPublicConnections = Session.Info.NumPublicConnections;
-			ResultSession.Session.NumOpenPublicConnections = Session.Info.NumOpenPublicConnections;
+			Session.Info.UpdatableInfo.CopyTo(ResultSession.Session, nullptr);
 			// TODO: Fill other fields
 		}
 
@@ -549,8 +552,8 @@ bool FOnlineSessionAtto::RegisterPlayers(const FName SessionName, const TArray<T
 	}
 	const auto NumAdded = Session->RegisteredPlayers.Num() - NumBefore;
 
-	Session->NumOpenPublicConnections = FMath::Clamp(Session->NumOpenPublicConnections - NumAdded, 0, Session->SessionSettings.NumPublicConnections);
-	// TODO: Send update to AttoServer
+	Session->NumOpenPublicConnections = Session->NumOpenPublicConnections - NumAdded;
+	UpdateSession(SessionName, Session->SessionSettings);
 
 	TriggerOnRegisterPlayersCompleteDelegates(SessionName, Players, true);
 	return true;
@@ -576,8 +579,8 @@ bool FOnlineSessionAtto::UnregisterPlayers(const FName SessionName, const TArray
 		NumRemoved += Session->RegisteredPlayers.RemoveSwap(Player);
 	}
 
-	Session->NumOpenPublicConnections = FMath::Clamp(Session->NumOpenPublicConnections + NumRemoved, 0, Session->SessionSettings.NumPublicConnections);
-	// TODO: Send update to AttoServer
+	Session->NumOpenPublicConnections = Session->NumOpenPublicConnections + NumRemoved;
+	UpdateSession(SessionName, Session->SessionSettings);
 
 	TriggerOnUnregisterPlayersCompleteDelegates(SessionName, Players, true);
 	return true;

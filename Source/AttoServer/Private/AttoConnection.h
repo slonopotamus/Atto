@@ -42,6 +42,8 @@ class FAttoConnection final : public FNoncopyable
 
 	void operator()(const FAttoCreateSessionRequest& Message);
 
+	void operator()(const FAttoUpdateSessionRequest& Message);
+
 	void operator()(const FAttoDestroySessionRequest& Message);
 
 	void operator()(const FAttoFindSessionsRequest& Message);

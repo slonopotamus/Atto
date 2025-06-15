@@ -1,4 +1,5 @@
 #pragma once
+#include "OnlineSessionSettings.h"
 
 struct FAttoLoginRequest
 {
@@ -33,14 +34,64 @@ struct FAttoLogoutResponse
 	}
 };
 
+struct FAttoSessionUpdatableInfo
+{
+	int32 NumOpenPublicConnections = 0;
+	int32 NumPublicConnections = 0;
+	EOnlineSessionState::Type State;
+	bool bAllowJoinInProgress = false;
+
+	FAttoSessionUpdatableInfo() = default;
+
+	explicit FAttoSessionUpdatableInfo(const FNamedOnlineSession& OnlineSession)
+	    : NumOpenPublicConnections{OnlineSession.NumOpenPublicConnections}
+	    , NumPublicConnections{OnlineSession.SessionSettings.NumPublicConnections}
+	    , State{OnlineSession.SessionState}
+	    , bAllowJoinInProgress{OnlineSession.SessionSettings.bAllowJoinInProgress}
+	{}
+
+	void CopyTo(FOnlineSession& OnlineSession, EOnlineSessionState::Type* StatePtr) const
+	{
+		OnlineSession.NumOpenPublicConnections = NumOpenPublicConnections;
+		OnlineSession.SessionSettings.NumPublicConnections = NumPublicConnections;
+		OnlineSession.SessionSettings.bAllowJoinInProgress = bAllowJoinInProgress;
+
+		if (StatePtr)
+		{
+			*StatePtr = State;
+		}
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoSessionUpdatableInfo& Message)
+	{
+		Ar << Message.NumOpenPublicConnections;
+		Ar << Message.NumPublicConnections;
+
+		int32 StateValue = Message.State;
+		Ar << StateValue;
+		Message.State = static_cast<EOnlineSessionState::Type>(StateValue);
+
+		return Ar;
+	}
+};
+
 struct FAttoSessionInfo
 {
 	uint64 SessionId = 0;
 	TArray<uint8> HostAddress;
 	int32 Port = 0;
 	int32 BuildUniqueId = 0;
-	int32 NumOpenPublicConnections = 0;
-	int32 NumPublicConnections = 0;
+	FAttoSessionUpdatableInfo UpdatableInfo;
+
+	bool IsJoinable() const
+	{
+		if (UpdatableInfo.NumOpenPublicConnections < 0)
+		{
+			return false;
+		}
+
+		return UpdatableInfo.bAllowJoinInProgress || UpdatableInfo.State != EOnlineSessionState::InProgress;
+	}
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoSessionInfo& Message)
 	{
@@ -48,8 +99,7 @@ struct FAttoSessionInfo
 		Ar << Message.HostAddress;
 		Ar << Message.Port;
 		Ar << Message.BuildUniqueId;
-		Ar << Message.NumOpenPublicConnections;
-		Ar << Message.NumPublicConnections;
+		Ar << Message.UpdatableInfo;
 		return Ar;
 	}
 };
@@ -74,6 +124,29 @@ struct FAttoCreateSessionRequest
 	friend FArchive& operator<<(FArchive& Ar, FAttoCreateSessionRequest& Message)
 	{
 		Ar << Message.SessionInfo;
+		return Ar;
+	}
+};
+
+struct FAttoUpdateSessionRequest
+{
+	uint64 SessionId = 0;
+	FAttoSessionUpdatableInfo SessionInfo;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoUpdateSessionRequest& Message)
+	{
+		Ar << Message.SessionInfo;
+		return Ar;
+	}
+};
+
+struct FAttoUpdateSessionResponse
+{
+	bool bSuccess = false;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoUpdateSessionResponse& Message)
+	{
+		Ar.SerializeBits(&Message.bSuccess, 1);
 		return Ar;
 	}
 };
@@ -134,6 +207,6 @@ struct FAttoFindSessionsResponse
 	}
 };
 
-using FAttoC2SProtocol = TVariant<FAttoLoginRequest, FAttoLogoutRequest, FAttoCreateSessionRequest, FAttoDestroySessionRequest, FAttoFindSessionsRequest>;
+using FAttoC2SProtocol = TVariant<FAttoLoginRequest, FAttoLogoutRequest, FAttoCreateSessionRequest, FAttoUpdateSessionRequest, FAttoDestroySessionRequest, FAttoFindSessionsRequest>;
 
-using FAttoS2CProtocol = TVariant<FAttoLoginResponse, FAttoLogoutResponse, FAttoCreateSessionResponse, FAttoDestroySessionResponse, FAttoFindSessionsResponse>;
+using FAttoS2CProtocol = TVariant<FAttoLoginResponse, FAttoLogoutResponse, FAttoCreateSessionResponse, FAttoUpdateSessionResponse, FAttoDestroySessionResponse, FAttoFindSessionsResponse>;
