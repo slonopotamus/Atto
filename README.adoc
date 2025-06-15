@@ -114,6 +114,7 @@ What's next?
 
 You can use https://github.com/mordentral/AdvancedSessionsPlugin[AdvancedSessions] plugin or built-in https://dev.epicgames.com/documentation/en-us/unreal-engine/online-session-nodes?application_version=4.27[Online Subsystem blueprint nodes] or just use OnlineSubsystem from C++.
 
+[[steam]]
 == Why not just use Steam OSS?
 
 * Because it doesn't allow to run multiple game instances on the same computer simultaneously
