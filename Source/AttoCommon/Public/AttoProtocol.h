@@ -109,6 +109,7 @@ struct ATTOCOMMON_API FAttoSessionInfo
 	FAttoSessionUpdatableInfo UpdatableInfo;
 	// TODO: We could skip sending this when creating session and instead determine whether connection is from dedicated server during Login
 	bool bIsDedicated = false;
+	bool bAntiCheatProtected = false;
 
 	bool IsJoinable() const
 	{
@@ -140,6 +141,7 @@ struct ATTOCOMMON_API FAttoSessionInfo
 		Ar << Message.BuildUniqueId;
 		Ar << Message.UpdatableInfo;
 		Ar << Message.bIsDedicated;
+		Ar << Message.bAntiCheatProtected;
 		return Ar;
 	}
 };

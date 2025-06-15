@@ -42,6 +42,15 @@ bool FAttoSessionInfo::Matches(const TMap<FName, FAttoFindSessionsParam>& Params
 		}
 	}
 
+	if (const auto* SearchAntiCheatProtected = Params.Find(SEARCH_SECURE_SERVERS_ONLY))
+	{
+		// TODO: Respect ComparisonOp
+		if (!bAntiCheatProtected)
+		{
+			return false;
+		}
+	}
+
 	// TODO: Support matching custom params
 	return true;
 }

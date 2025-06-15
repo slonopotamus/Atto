@@ -152,6 +152,7 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 			    .BuildUniqueId = Session->SessionSettings.BuildUniqueId,
 			    .UpdatableInfo = FAttoSessionUpdatableInfo{*Session},
 			    .bIsDedicated = Session->SessionSettings.bIsDedicated,
+			    .bAntiCheatProtected = Session->SessionSettings.bAntiCheatProtected,
 			});
 
 			TriggerOnCreateSessionCompleteDelegates(SessionName, true);
