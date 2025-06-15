@@ -48,6 +48,8 @@ class FAttoConnection final : public FNoncopyable
 
 	void operator()(const FAttoFindSessionsRequest& Message);
 
+	void operator()(const FAttoQueryServerUtcTimeRequest& Message);
+
 public:
 	explicit FAttoConnection(FAttoServerInstance& Server, lws* LwsConnection)
 	    : Server(Server)

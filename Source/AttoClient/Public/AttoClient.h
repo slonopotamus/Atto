@@ -23,6 +23,8 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 
 	void operator()(const FAttoFindSessionsResponse& Message);
 
+	void operator()(const FAttoQueryServerUtcTimeResponse& Message);
+
 	void Send(FAttoC2SProtocol&& Message);
 
 	template<
@@ -57,6 +59,8 @@ public:
 
 	void DestroySessionAsync();
 
+	void QueryServerUtcTimeAsync();
+
 	DECLARE_EVENT(FAttoClient, FAttoConnectedEvent);
 	FAttoConnectedEvent OnConnected;
 
@@ -77,6 +81,9 @@ public:
 
 	DECLARE_EVENT_OneParam(FAttoClient, FAttoFindSessionsEvent, const FAttoFindSessionsResponse& /* Response */);
 	FAttoFindSessionsEvent OnFindSessionsResponse;
+
+	DECLARE_EVENT_OneParam(FAttoClient, FAttoServerUtcTimeEvent, const FDateTime& ServerUtcTime);
+	FAttoServerUtcTimeEvent OnServerUtcTime;
 
 	DECLARE_EVENT_TwoParams(FAttoClient, FAttoDisconnectedEvent, const FString& /* Reason */, bool /* bWasClean */);
 	FAttoDisconnectedEvent OnDisconnected;

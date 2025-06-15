@@ -24,6 +24,7 @@ If you're sure it's the latter, consider reporting it to https://github.com/slon
 
 * https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-identity-interface-in-unreal-engine[Identity] (login, logout)
 * https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-session-interface-in-unreal-engine[Sessions] (create, start, end, destroy, find)
+* Time service
 
 == Futher development ideas
 

@@ -4,6 +4,7 @@
 #include "OnlineAsyncTaskManagerAtto.h"
 #include "OnlineIdentityAtto.h"
 #include "OnlineSessionAtto.h"
+#include "OnlineTimeAtto.h"
 
 const FName ATTO_SUBSYSTEM{TEXT("ATTO")};
 
@@ -29,6 +30,7 @@ bool FOnlineSubsystemAtto::Init()
 
 	IdentityInterface = MakeShared<FOnlineIdentityAtto>(*this);
 	SessionInterface = MakeShared<FOnlineSessionAtto>(*this);
+	TimeInterface = MakeShared<FOnlineTimeAtto>(*this);
 
 	TaskManager = MakeShared<FOnlineAsyncTaskManagerAtto>(*this);
 
@@ -71,6 +73,7 @@ bool FOnlineSubsystemAtto::Shutdown()
 
 	DestructAttoInterface(IdentityInterface);
 	DestructAttoInterface(SessionInterface);
+	DestructAttoInterface(TimeInterface);
 
 	TaskManager.Reset();
 	AttoClient.Reset();
@@ -120,4 +123,9 @@ FText FOnlineSubsystemAtto::GetOnlineServiceName() const
 IOnlineSessionPtr FOnlineSubsystemAtto::GetSessionInterface() const
 {
 	return SessionInterface;
+}
+
+TSharedPtr<IOnlineTime> FOnlineSubsystemAtto::GetTimeInterface() const
+{
+	return TimeInterface;
 }
