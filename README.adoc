@@ -113,3 +113,10 @@ LogOnline: OSS: Successfully logged into Atto server, userId=<value>
 What's next?
 
 You can use https://github.com/mordentral/AdvancedSessionsPlugin[AdvancedSessions] plugin or built-in https://dev.epicgames.com/documentation/en-us/unreal-engine/online-session-nodes?application_version=4.27[Online Subsystem blueprint nodes] or just use OnlineSubsystem from C++.
+
+== Why not just use Steam OSS?
+
+* Because it doesn't allow to run multiple game instances on the same computer simultaneously
+* Because it expects dedicated server to have public IP address
+* Because it is nontrivial to run multiple dedicated servers on the same machine
+* Because it doesn't work in PIE
