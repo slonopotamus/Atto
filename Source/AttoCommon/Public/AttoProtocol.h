@@ -110,10 +110,12 @@ struct FAttoDestroySessionResponse
 
 struct FAttoFindSessionsRequest
 {
+	int32 RequestId = 0;
 	uint32 MaxResults = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsRequest& Message)
 	{
+		Ar << Message.RequestId;
 		Ar << Message.MaxResults;
 		return Ar;
 	}
@@ -121,10 +123,12 @@ struct FAttoFindSessionsRequest
 
 struct FAttoFindSessionsResponse
 {
+	int32 RequestId = 0;
 	TArray<FAttoSessionInfoEx> Sessions;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsResponse& Message)
 	{
+		Ar << Message.RequestId;
 		Ar << Message.Sessions;
 		return Ar;
 	}

@@ -301,27 +301,36 @@ bool FOnlineSessionAtto::FindSessions(const int32 SearchingPlayerNum, const TSha
 
 bool FOnlineSessionAtto::FindSessions(const FUniqueNetId& SearchingPlayerId, const TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
-	if (ensure(!CurrentSessionSearch.IsSet()))
+	if (CurrentSessionSearch.IsSet())
 	{
-		CurrentSessionSearch = {
-		    .SearchSettings = SearchSettings,
-		    // TODO: Also subscribe to disconnect?
-		    .OnFindSessionsResponseHandle = Subsystem.AttoClient->OnFindSessionsResponse.AddRaw(this, &ThisClass::OnFindSessionsResponse),
-		};
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring game search request while one is pending"));
 
-		// TODO: Use search settings
-		Subsystem.AttoClient->FindSessionsAsync(SearchSettings->MaxSearchResults);
-		return true;
+		TriggerOnFindSessionsCompleteDelegates(false);
+		return false;
 	}
 
-	TriggerOnFindSessionsCompleteDelegates(false);
-	return false;
+	SearchSettings->PlatformHash = FMath::Rand32();
+
+	CurrentSessionSearch = {
+	    .SearchSettings = SearchSettings,
+	    // TODO: Also subscribe to disconnect?
+	    .OnFindSessionsResponseHandle = Subsystem.AttoClient->OnFindSessionsResponse.AddRaw(this, &ThisClass::OnFindSessionsResponse),
+	};
+
+	Subsystem.AttoClient->FindSessionsAsync(*SearchSettings);
+	return true;
 }
 
 void FOnlineSessionAtto::OnFindSessionsResponse(const FAttoFindSessionsResponse& Message)
 {
 	if (const auto* Search = CurrentSessionSearch.GetPtrOrNull())
 	{
+		if (const auto& CurrentSearchId = Search->SearchSettings->PlatformHash; CurrentSearchId != Message.RequestId)
+		{
+			UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring game search response %d because current one is %d"), Message.RequestId, CurrentSearchId);
+			return;
+		}
+
 		Subsystem.AttoClient->OnFindSessionsResponse.Remove(Search->OnFindSessionsResponseHandle);
 
 		const auto BuildUniqueId = GetBuildUniqueId();
@@ -407,6 +416,7 @@ bool FOnlineSessionAtto::JoinSession(const int32 LocalUserNum, const FName Sessi
 
 	if (!DesiredSession.Session.SessionInfo.IsValid())
 	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Cannot join session(%s): session info is invalid"), *SessionName.ToString());
 		TriggerOnJoinSessionCompleteDelegates(SessionName, EOnJoinSessionCompleteResult::CouldNotRetrieveAddress);
 		return false;
 	}
@@ -467,33 +477,45 @@ bool FOnlineSessionAtto::SendSessionInviteToFriends(const FUniqueNetId& LocalUse
 
 bool FOnlineSessionAtto::GetResolvedConnectString(const FName SessionName, FString& ConnectInfo, const FName PortType)
 {
-	if (ensure(PortType == NAME_GamePort))
+	if (!ensure(PortType == NAME_GamePort))
 	{
-		if (const auto* Session = GetNamedSession(SessionName))
-		{
-			if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(Session->SessionInfo))
-			{
-				ConnectInfo = SessionInfo->HostAddress->ToString(true);
-				return true;
-			}
-		}
+		return false;
 	}
 
-	return false;
+	const auto* Session = GetNamedSession(SessionName);
+	if (!Session)
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Unknown session name (%s) specified to GetResolvedConnectString()"), *SessionName.ToString());
+		return false;
+	}
+
+	const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(Session->SessionInfo);
+	if (!SessionInfo)
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Invalid session info for session %s in GetResolvedConnectString()"), *SessionName.ToString());
+		return false;
+	}
+
+	ConnectInfo = SessionInfo->HostAddress->ToString(true);
+	return true;
 }
 
 bool FOnlineSessionAtto::GetResolvedConnectString(const FOnlineSessionSearchResult& SearchResult, const FName PortType, FString& ConnectInfo)
 {
-	if (ensure(PortType == NAME_GamePort))
+	if (!ensure(PortType == NAME_GamePort))
 	{
-		if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(SearchResult.Session.SessionInfo))
-		{
-			ConnectInfo = SessionInfo->HostAddress->ToString(true);
-			return true;
-		}
+		return false;
 	}
 
-	return false;
+	const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(SearchResult.Session.SessionInfo);
+	if (!SessionInfo)
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Invalid session info in search result to GetResolvedConnectString()"));
+		return false;
+	}
+
+	ConnectInfo = SessionInfo->HostAddress->ToString(true);
+	return true;
 }
 
 FOnlineSessionSettings* FOnlineSessionAtto::GetSessionSettings(const FName SessionName)

@@ -3,6 +3,8 @@
 #include "AttoProtocol.h"
 #include "IWebSocket.h"
 
+class FOnlineSessionSearch;
+
 class ATTOCLIENT_API FAttoClient final : FNoncopyable
 {
 	typedef FAttoClient ThisClass;
@@ -43,7 +45,7 @@ public:
 
 	void LogoutAsync();
 
-	void FindSessionsAsync(uint32 MaxResults);
+	void FindSessionsAsync(const FOnlineSessionSearch& Search);
 
 	void CreateSessionAsync(FAttoSessionInfo SessionInfo);
 

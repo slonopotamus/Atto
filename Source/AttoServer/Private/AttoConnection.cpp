@@ -197,5 +197,5 @@ void FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 		// TODO: Disconnect them?
 	}
 
-	Send<FAttoFindSessionsResponse>(MoveTemp(Sessions));
+	Send<FAttoFindSessionsResponse>(Message.RequestId, MoveTemp(Sessions));
 }

@@ -1,6 +1,7 @@
 #include "AttoClient.h"
 #include "AttoCommon.h"
 #include "AttoProtocol.h"
+#include "OnlineSessionSettings.h"
 #include "WebSocketsModule.h"
 
 FAttoClient::FAttoClient(const FString& Url)
@@ -10,7 +11,7 @@ FAttoClient::FAttoClient(const FString& Url)
 		OnConnected.Broadcast();
 	});
 
-	WebSocket->OnClosed().AddLambda([&](int32 StatusCode, const FString& Reason, bool bWasClean) { OnDisconnected.Broadcast(Reason, bWasClean); });
+	WebSocket->OnClosed().AddLambda([&](int32 StatusCode, const FString& Reason, const bool bWasClean) { OnDisconnected.Broadcast(Reason, bWasClean); });
 
 	WebSocket->OnConnectionError().AddLambda([&](const FString& Error) { OnConnectionError.Broadcast(Error); });
 
@@ -70,9 +71,9 @@ void FAttoClient::LogoutAsync()
 	Send<FAttoLogoutRequest>();
 }
 
-void FAttoClient::FindSessionsAsync(const uint32 MaxResults)
+void FAttoClient::FindSessionsAsync(const FOnlineSessionSearch& Search)
 {
-	Send<FAttoFindSessionsRequest>(MaxResults);
+	Send<FAttoFindSessionsRequest>(Search.PlatformHash, Search.MaxSearchResults);
 }
 
 void FAttoClient::CreateSessionAsync(FAttoSessionInfo SessionInfo)
