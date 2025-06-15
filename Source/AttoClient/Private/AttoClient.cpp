@@ -151,6 +151,11 @@ void FAttoClient::DestroySessionAsync()
 	Send<FAttoDestroySessionRequest>();
 }
 
+void FAttoClient::QueryServerUtcTimeAsync()
+{
+	Send<FAttoQueryServerUtcTimeRequest>();
+}
+
 void FAttoClient::operator()(const FAttoLoginResponse& Message)
 {
 	OnLoginResponse.Broadcast(Message);
@@ -179,4 +184,9 @@ void FAttoClient::operator()(const FAttoDestroySessionResponse& Message)
 void FAttoClient::operator()(const FAttoFindSessionsResponse& Message)
 {
 	OnFindSessionsResponse.Broadcast(Message);
+}
+
+void FAttoClient::operator()(const FAttoQueryServerUtcTimeResponse& Message)
+{
+	OnServerUtcTime.Broadcast(Message.ServerTime);
 }

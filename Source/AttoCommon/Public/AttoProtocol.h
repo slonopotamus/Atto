@@ -251,6 +251,38 @@ struct ATTOCOMMON_API FAttoFindSessionsResponse
 	}
 };
 
-using FAttoC2SProtocol = TVariant<FAttoLoginRequest, FAttoLogoutRequest, FAttoCreateSessionRequest, FAttoUpdateSessionRequest, FAttoDestroySessionRequest, FAttoFindSessionsRequest>;
+struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
+{
+	friend FArchive& operator<<(FArchive& Ar, FAttoQueryServerUtcTimeRequest& Message)
+	{
+		return Ar;
+	}
+};
 
-using FAttoS2CProtocol = TVariant<FAttoLoginResponse, FAttoLogoutResponse, FAttoCreateSessionResponse, FAttoUpdateSessionResponse, FAttoDestroySessionResponse, FAttoFindSessionsResponse>;
+struct ATTOCOMMON_API FAttoQueryServerUtcTimeResponse
+{
+	FDateTime ServerTime;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoQueryServerUtcTimeResponse& Message)
+	{
+		Ar << Message.ServerTime;
+		return Ar;
+	}
+};
+
+using FAttoC2SProtocol = TVariant<
+    FAttoLoginRequest,
+    FAttoLogoutRequest,
+    FAttoCreateSessionRequest,
+    FAttoUpdateSessionRequest,
+    FAttoDestroySessionRequest,
+    FAttoFindSessionsRequest,
+    FAttoQueryServerUtcTimeRequest>;
+
+using FAttoS2CProtocol = TVariant<FAttoLoginResponse,
+                                  FAttoLogoutResponse,
+                                  FAttoCreateSessionResponse,
+                                  FAttoUpdateSessionResponse,
+                                  FAttoDestroySessionResponse,
+                                  FAttoFindSessionsResponse,
+                                  FAttoQueryServerUtcTimeResponse>;

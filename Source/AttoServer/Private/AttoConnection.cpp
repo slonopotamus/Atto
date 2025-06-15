@@ -208,3 +208,8 @@ void FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 
 	Send<FAttoFindSessionsResponse>(Message.RequestId, MoveTemp(Sessions));
 }
+
+void FAttoConnection::operator()(const FAttoQueryServerUtcTimeRequest& Message)
+{
+	Send<FAttoQueryServerUtcTimeResponse>(FDateTime::UtcNow());
+}
