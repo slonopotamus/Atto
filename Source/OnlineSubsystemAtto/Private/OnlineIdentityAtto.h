@@ -51,4 +51,6 @@ public:
 	virtual FPlatformUserId GetPlatformUserIdFromUniqueNetId(const FUniqueNetId& UniqueNetId) const override;
 
 	virtual FString GetAuthType() const override;
+
+	int32 GetLocalUserNumFromUniqueNetId(const FUniqueNetId& UniqueNetId) const;
 };

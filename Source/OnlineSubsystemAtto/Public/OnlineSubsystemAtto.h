@@ -13,10 +13,6 @@ class ONLINESUBSYSTEMATTO_API FOnlineSubsystemAtto final : public FOnlineSubsyst
 {
 	typedef FOnlineSubsystemImpl Super;
 
-	TSharedPtr<FOnlineIdentityAtto> IdentityInterface;
-
-	TSharedPtr<FOnlineSessionAtto> SessionInterface;
-
 	TSharedPtr<FRunnableThread> OnlineAsyncTaskThread;
 
 public:
@@ -40,6 +36,10 @@ public:
 	virtual FText GetOnlineServiceName() const override;
 
 	virtual TSharedPtr<IOnlineSession> GetSessionInterface() const override;
+
+	TSharedPtr<FOnlineIdentityAtto> IdentityInterface;
+
+	TSharedPtr<FOnlineSessionAtto> SessionInterface;
 
 	TSharedPtr<FAttoClient> AttoClient;
 

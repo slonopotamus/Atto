@@ -1,6 +1,7 @@
 #include "OnlineSessionAtto.h"
 #include "AttoClient.h"
 #include "Interfaces/OnlineIdentityInterface.h"
+#include "OnlineIdentityAtto.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystemAtto.h"
 #include "OnlineSubsystemUtils.h"
@@ -104,9 +105,13 @@ EOnlineSessionState::Type FOnlineSessionAtto::GetSessionState(const FName Sessio
 
 bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName SessionName, const FOnlineSessionSettings& NewSessionSettings)
 {
-	if (!GetNamedSession(SessionName) && Subsystem.AttoClient)
+	if (GetNamedSession(SessionName))
 	{
-		if (const auto OwningUserId = StaticCastSharedPtr<const FUniqueNetIdAtto>(Subsystem.GetIdentityInterface()->GetUniquePlayerId(HostingPlayerNum)))
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Cannot create session '%s': session already exists"), *SessionName.ToString());
+	}
+	else
+	{
+		if (const auto OwningUserId = StaticCastSharedPtr<const FUniqueNetIdAtto>(Subsystem.IdentityInterface->GetUniquePlayerId(HostingPlayerNum)))
 		{
 			const FGuid Guid = FGuid::NewGuid();
 			// TODO: Who is responsible for generating session ids?
@@ -134,7 +139,7 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 			Session->NumOpenPrivateConnections = NewSessionSettings.NumPrivateConnections;
 			Session->NumOpenPublicConnections = NewSessionSettings.NumPublicConnections;
 			Session->OwningUserId = OwningUserId;
-			Session->OwningUserName = Subsystem.GetIdentityInterface()->GetPlayerNickname(HostingPlayerNum);
+			Session->OwningUserName = Subsystem.IdentityInterface->GetPlayerNickname(HostingPlayerNum);
 			Session->SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, HostAddress);
 			Session->SessionSettings = NewSessionSettings;
 			Session->SessionState = EOnlineSessionState::Pending;
@@ -152,6 +157,8 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 			TriggerOnCreateSessionCompleteDelegates(SessionName, true);
 			return true;
 		}
+
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Cannot create session '%s': o logged in user found for LocalUserNum=%d"), *SessionName.ToString(), HostingPlayerNum);
 	}
 
 	TriggerOnCreateSessionCompleteDelegates(SessionName, false);
@@ -160,13 +167,14 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 
 bool FOnlineSessionAtto::CreateSession(const FUniqueNetId& HostingPlayerId, const FName SessionName, const FOnlineSessionSettings& NewSessionSettings)
 {
-	// TODO: Use proper HostingPlayerNum
-	return CreateSession(0, SessionName, NewSessionSettings);
+	const auto LocalUserNum = Subsystem.IdentityInterface->GetLocalUserNumFromUniqueNetId(HostingPlayerId);
+	return CreateSession(LocalUserNum, SessionName, NewSessionSettings);
 }
 
 bool FOnlineSessionAtto::StartSession(const FName SessionName)
 {
 	bool bSuccess = false;
+
 	if (auto* Session = Sessions.Find(SessionName))
 	{
 		if (Session->SessionState == EOnlineSessionState::Pending || Session->SessionState == EOnlineSessionState::Ended)
@@ -175,24 +183,17 @@ bool FOnlineSessionAtto::StartSession(const FName SessionName)
 			// TODO: Send update to AttoServer
 			bSuccess = true;
 		}
+		else
+		{
+			UE_LOG_ONLINE_SESSION(Warning, TEXT("Can't start an online session (%s) in state %s"), *SessionName.ToString(), EOnlineSessionState::ToString(Session->SessionState));
+		}
+	}
+	else
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Can't start an online game for session (%s) that hasn't been created"), *SessionName.ToString());
 	}
 
 	TriggerOnStartSessionCompleteDelegates(SessionName, bSuccess);
-	return bSuccess;
-}
-
-bool FOnlineSessionAtto::UpdateSession(const FName SessionName, FOnlineSessionSettings& UpdatedSessionSettings, bool bShouldRefreshOnlineData)
-{
-	bool bSuccess = false;
-
-	if (auto* Session = GetNamedSession(SessionName))
-	{
-		Session->SessionSettings = UpdatedSessionSettings;
-		// TODO: Send update to AttoServer
-		bSuccess = true;
-	}
-
-	TriggerOnUpdateSessionCompleteDelegates(SessionName, bSuccess);
 	return bSuccess;
 }
 
@@ -200,11 +201,22 @@ bool FOnlineSessionAtto::EndSession(const FName SessionName)
 {
 	bool bSuccess = false;
 
-	if (auto* Session = Sessions.Find(SessionName); Session && Session->SessionState == EOnlineSessionState::InProgress)
+	if (auto* Session = Sessions.Find(SessionName))
 	{
-		Session->SessionState = EOnlineSessionState::Ended;
-		// TODO: Send update to AttoServer
-		bSuccess = true;
+		if (Session->SessionState == EOnlineSessionState::InProgress)
+		{
+			Session->SessionState = EOnlineSessionState::Ended;
+			// TODO: Send update to AttoServer
+			bSuccess = true;
+		}
+		else
+		{
+			UE_LOG_ONLINE_SESSION(Warning, TEXT("Can't end session (%s) in state %s"), *SessionName.ToString(), EOnlineSessionState::ToString(Session->SessionState));
+		}
+	}
+	else
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Can't end an online game for session (%s) that hasn't been created"), *SessionName.ToString());
 	}
 
 	TriggerOnEndSessionCompleteDelegates(SessionName, bSuccess);
@@ -215,10 +227,14 @@ bool FOnlineSessionAtto::DestroySession(const FName SessionName, const FOnDestro
 {
 	const bool bSuccess = Sessions.Remove(SessionName) > 0;
 
-	if (bSuccess && Subsystem.AttoClient)
+	if (bSuccess)
 	{
 		// TODO: Wait until call completes?
 		Subsystem.AttoClient->DestroySessionAsync();
+	}
+	else
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Can't destroy a null online session (%s)"), *SessionName.ToString());
 	}
 
 	CompletionDelegate.ExecuteIfBound(SessionName, bSuccess);
@@ -226,14 +242,32 @@ bool FOnlineSessionAtto::DestroySession(const FName SessionName, const FOnDestro
 	return bSuccess;
 }
 
-bool FOnlineSessionAtto::IsPlayerInSession(const FName SessionName, const FUniqueNetId& UniqueId)
+bool FOnlineSessionAtto::UpdateSession(const FName SessionName, FOnlineSessionSettings& UpdatedSessionSettings, bool bShouldRefreshOnlineData)
 {
-	if (const auto* Session = GetNamedSession(SessionName); Session && ensure(UniqueId.IsValid()))
+	bool bSuccess = false;
+
+	if (auto* Session = GetNamedSession(SessionName))
 	{
-		return Session->OwningUserId == UniqueId.AsShared() || Session->RegisteredPlayers.Contains(UniqueId.AsShared());
+		Session->SessionSettings = UpdatedSessionSettings;
+
+		if (bShouldRefreshOnlineData)
+		{
+			// TODO: Send update to AttoServer
+		}
+
+		bSuccess = true;
+	}
+	else
+	{
 	}
 
-	return false;
+	TriggerOnUpdateSessionCompleteDelegates(SessionName, bSuccess);
+	return bSuccess;
+}
+
+bool FOnlineSessionAtto::IsPlayerInSession(const FName SessionName, const FUniqueNetId& UniqueId)
+{
+	return IsPlayerInSessionImpl(this, SessionName, UniqueId);
 }
 
 bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueNetId>>& LocalPlayers, const FName SessionName, const FOnlineSessionSettings& NewSessionSettings, TSharedRef<FOnlineSessionSearch>& SearchSettings)
@@ -256,7 +290,7 @@ bool FOnlineSessionAtto::CancelMatchmaking(const FUniqueNetId& SearchingPlayerId
 
 bool FOnlineSessionAtto::FindSessions(const int32 SearchingPlayerNum, const TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
-	if (const auto& UserId = Subsystem.GetIdentityInterface()->GetUniquePlayerId(SearchingPlayerNum))
+	if (const auto& UserId = Subsystem.IdentityInterface->GetUniquePlayerId(SearchingPlayerNum))
 	{
 		return FindSessions(*UserId, SearchSettings);
 	}
@@ -267,7 +301,7 @@ bool FOnlineSessionAtto::FindSessions(const int32 SearchingPlayerNum, const TSha
 
 bool FOnlineSessionAtto::FindSessions(const FUniqueNetId& SearchingPlayerId, const TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
-	if (Subsystem.AttoClient && ensure(!CurrentSessionSearch.IsSet()))
+	if (ensure(!CurrentSessionSearch.IsSet()))
 	{
 		CurrentSessionSearch = {
 		    .SearchSettings = SearchSettings,
@@ -288,10 +322,7 @@ void FOnlineSessionAtto::OnFindSessionsResponse(const FAttoFindSessionsResponse&
 {
 	if (const auto* Search = CurrentSessionSearch.GetPtrOrNull())
 	{
-		if (Subsystem.AttoClient)
-		{
-			Subsystem.AttoClient->OnFindSessionsResponse.Remove(Search->OnFindSessionsResponseHandle);
-		}
+		Subsystem.AttoClient->OnFindSessionsResponse.Remove(Search->OnFindSessionsResponseHandle);
 
 		const auto BuildUniqueId = GetBuildUniqueId();
 
@@ -328,6 +359,7 @@ void FOnlineSessionAtto::OnFindSessionsResponse(const FAttoFindSessionsResponse&
 
 bool FOnlineSessionAtto::FindSessionById(const FUniqueNetId& SearchingUserId, const FUniqueNetId& SessionId, const FUniqueNetId& FriendId, const FOnSingleSessionResultCompleteDelegate& CompletionDelegate)
 {
+	// TODO: Implement this
 	static const FOnlineSessionSearchResult EmptyResult;
 	CompletionDelegate.ExecuteIfBound(0, false, EmptyResult);
 	return false;
@@ -339,13 +371,13 @@ bool FOnlineSessionAtto::CancelFindSessions()
 
 	if (const auto* Search = CurrentSessionSearch.GetPtrOrNull())
 	{
-		if (Subsystem.AttoClient)
-		{
-			Subsystem.AttoClient->OnFindSessionsResponse.Remove(Search->OnFindSessionsResponseHandle);
-		}
-
+		Subsystem.AttoClient->OnFindSessionsResponse.Remove(Search->OnFindSessionsResponseHandle);
 		CurrentSessionSearch.Reset();
 		bSuccess = true;
+	}
+	else
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Can't cancel a search that isn't in progress"));
 	}
 
 	TriggerOnCancelFindSessionsCompleteDelegates(bSuccess);
@@ -359,13 +391,21 @@ bool FOnlineSessionAtto::PingSearchResults(const FOnlineSessionSearchResult& Sea
 
 bool FOnlineSessionAtto::JoinSession(const int32 LocalUserNum, const FName SessionName, const FOnlineSessionSearchResult& DesiredSession)
 {
+	if (LocalUserNum < 0 || LocalUserNum >= MAX_LOCAL_PLAYERS)
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Cannot join session (%s), invalid LocalUserNum=%d"), *SessionName.ToString(), LocalUserNum);
+		TriggerOnJoinSessionCompleteDelegates(SessionName, EOnJoinSessionCompleteResult::UnknownError);
+		return false;
+	}
+
 	if (GetNamedSession(SessionName))
 	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Session (%s) already exists, can't join twice"), *SessionName.ToString());
 		TriggerOnJoinSessionCompleteDelegates(SessionName, EOnJoinSessionCompleteResult::AlreadyInSession);
 		return false;
 	}
 
-	if (DesiredSession.Session.SessionInfo.IsValid())
+	if (!DesiredSession.Session.SessionInfo.IsValid())
 	{
 		TriggerOnJoinSessionCompleteDelegates(SessionName, EOnJoinSessionCompleteResult::CouldNotRetrieveAddress);
 		return false;
@@ -382,8 +422,8 @@ bool FOnlineSessionAtto::JoinSession(const int32 LocalUserNum, const FName Sessi
 
 bool FOnlineSessionAtto::JoinSession(const FUniqueNetId& LocalUserId, const FName SessionName, const FOnlineSessionSearchResult& DesiredSession)
 {
-	// TODO: Is LocalUserNum=0 okay?
-	return JoinSession(0, SessionName, DesiredSession);
+	const auto LocalUserNum = Subsystem.IdentityInterface->GetLocalUserNumFromUniqueNetId(LocalUserId);
+	return JoinSession(LocalUserNum, SessionName, DesiredSession);
 }
 
 bool FOnlineSessionAtto::FindFriendSession(const int32 LocalUserNum, const FUniqueNetId& Friend)
@@ -431,7 +471,7 @@ bool FOnlineSessionAtto::GetResolvedConnectString(const FName SessionName, FStri
 	{
 		if (const auto* Session = GetNamedSession(SessionName))
 		{
-			if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(Session->SessionInfo); ensure(SessionInfo))
+			if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(Session->SessionInfo))
 			{
 				ConnectInfo = SessionInfo->HostAddress->ToString(true);
 				return true;
@@ -446,7 +486,7 @@ bool FOnlineSessionAtto::GetResolvedConnectString(const FOnlineSessionSearchResu
 {
 	if (ensure(PortType == NAME_GamePort))
 	{
-		if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(SearchResult.Session.SessionInfo); ensure(SessionInfo))
+		if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(SearchResult.Session.SessionInfo))
 		{
 			ConnectInfo = SessionInfo->HostAddress->ToString(true);
 			return true;

@@ -1,4 +1,6 @@
 #include "OnlineSubsystemAtto.h"
+#include "AttoClient.h"
+#include "AttoCommon.h"
 #include "OnlineAsyncTaskManagerAtto.h"
 #include "OnlineIdentityAtto.h"
 #include "OnlineSessionAtto.h"
@@ -8,6 +10,10 @@ const FName ATTO_SUBSYSTEM{TEXT("ATTO")};
 bool FOnlineSubsystemAtto::Init()
 {
 	UE_LOG_ONLINE(VeryVerbose, TEXT("FOnlineSubsystemAtto::Init()"));
+
+	auto ConnectUrl = Atto::GetConnectUrl();
+	AttoClient = MakeShared<FAttoClient>(MoveTemp(ConnectUrl));
+	AttoClient->OnConnectionError.AddLambda([](const FString& Error) { UE_LOG(LogAtto, Error, TEXT("%s"), *Error); });
 
 	IdentityInterface = MakeShared<FOnlineIdentityAtto>(*this);
 	SessionInterface = MakeShared<FOnlineSessionAtto>(*this);

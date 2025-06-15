@@ -1,7 +1,5 @@
 #include "OnlineIdentityAtto.h"
 #include "AttoClient.h"
-#include "AttoCommon.h"
-#include "OnlineAsyncTaskManagerAtto.h"
 #include "OnlineError.h"
 #include "OnlineSubsystemAtto.h"
 #include "UniqueNetIdAtto.h"
@@ -9,66 +7,58 @@
 
 bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCredentials& AccountCredentials)
 {
-	if (LocalUserNum < 0)
+	if (LocalUserNum < 0 || LocalUserNum > MAX_LOCAL_PLAYERS)
 	{
-		TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, TEXT(""));
+		TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, FString::Printf(TEXT("Invalid LocalUserNum=%d"), LocalUserNum));
 		return false;
 	}
 
 	if (const auto* UserId = LocalUsers.Find(LocalUserNum))
 	{
-		TriggerOnLoginCompleteDelegates(LocalUserNum, true, **UserId, TEXT(""));
+		TriggerOnLoginCompleteDelegates(LocalUserNum, true, **UserId, FString::Printf(TEXT("Local user %d is already logged in"), LocalUserNum));
 		return false;
 	}
 
-	if (!Subsystem.AttoClient)
-	{
-		auto ConnectUrl = Atto::GetConnectUrl();
-		Subsystem.AttoClient = MakeShared<FAttoClient>(MoveTemp(ConnectUrl));
-		Subsystem.AttoClient->OnConnectionError.AddLambda([](const FString& Error) { UE_LOG(LogAtto, Error, TEXT("%s"), *Error); });
-	}
+	TSharedPtr<FDelegateHandle> OnConnectedDelegateHandle = MakeShared<FDelegateHandle>();
+	auto OnConnected = [=, this] {
+		Subsystem.AttoClient->OnConnected.Remove(*OnConnectedDelegateHandle);
 
-	Subsystem.TaskManager->AddGenericToInQueue([=, this] {
-		TSharedPtr<FDelegateHandle> OnConnectedDelegateHandle = MakeShared<FDelegateHandle>();
-		auto OnConnected = [=, this] {
-			Subsystem.AttoClient->OnConnected.Remove(*OnConnectedDelegateHandle);
-			
-			TSharedPtr<FDelegateHandle> OnLoginDelegateHandle = MakeShared<FDelegateHandle>();
-			
-			// TODO: Can we avoid nested lambdas?
-			auto OnLogin = [=, this](const FAttoLoginResponse& LoginResponse) {
-				Subsystem.AttoClient->OnLoginResponse.Remove(*OnLoginDelegateHandle);
+		TSharedPtr<FDelegateHandle> OnLoginDelegateHandle = MakeShared<FDelegateHandle>();
 
-				// TODO: Rewrite this using Visit
-				if (const auto* UserIdPtr =  LoginResponse.TryGet<uint64>())
-				{
-					const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
-					Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
-					LocalUsers.Add(LocalUserNum, UserId);
-					TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
-				}
-				else
-				{
-					const auto& Error = LoginResponse.Get<FString>();
-					TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
-				}
-			};
+		// TODO: Can we avoid nested lambdas?
+		auto OnLogin = [=, this](const FAttoLoginResponse& LoginResponse) {
+			Subsystem.AttoClient->OnLoginResponse.Remove(*OnLoginDelegateHandle);
 
-			// TODO: Also subscribe to OnConnectionError?
-			OnLoginDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnLoginResponse.AddLambda(OnLogin));
-			// TODO: Is AccountCredentials properly captured (by value)?
-			Subsystem.AttoClient->LoginAsync(AccountCredentials.Id, AccountCredentials.Token);
+			// TODO: Rewrite this using Visit
+			if (const auto* UserIdPtr = LoginResponse.TryGet<uint64>())
+			{
+				const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
+				Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
+				LocalUsers.Add(LocalUserNum, UserId);
+				TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
+			}
+			else
+			{
+				const auto& Error = LoginResponse.Get<FString>();
+				TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
+			}
 		};
-		
-		if (Subsystem.AttoClient->IsConnected())
-		{
-			OnConnected();
-		}
-		else
-		{
-			OnConnectedDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnConnected.AddLambda(OnConnected));
-			Subsystem.AttoClient->ConnectAsync();
-		} });
+
+		// TODO: Also subscribe to OnConnectionError?
+		OnLoginDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnLoginResponse.AddLambda(OnLogin));
+		// TODO: Is AccountCredentials properly captured (by value)?
+		Subsystem.AttoClient->LoginAsync(AccountCredentials.Id, AccountCredentials.Token);
+	};
+
+	if (Subsystem.AttoClient->IsConnected())
+	{
+		OnConnected();
+	}
+	else
+	{
+		OnConnectedDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnConnected.AddLambda(OnConnected));
+		Subsystem.AttoClient->ConnectAsync();
+	}
 
 	return true;
 }
@@ -78,14 +68,12 @@ bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 	const auto* UserId = LocalUsers.Find(LocalUserNum);
 	if (!UserId)
 	{
+		UE_LOG_ONLINE_IDENTITY(Warning, TEXT("No logged in user found for LocalUserNum=%d"), LocalUserNum);
 		TriggerOnLogoutCompleteDelegates(LocalUserNum, false);
 		return false;
 	}
 
-	if (Subsystem.AttoClient)
-	{
-		Subsystem.AttoClient->LogoutAsync();
-	}
+	Subsystem.AttoClient->LogoutAsync();
 
 	Accounts.Remove(*UserId);
 	LocalUsers.Remove(LocalUserNum);
@@ -98,6 +86,7 @@ bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 
 bool FOnlineIdentityAtto::AutoLogin(const int32 LocalUserNum)
 {
+	// TODO: Fill credentials
 	return Login(LocalUserNum, FOnlineAccountCredentials());
 }
 
@@ -191,18 +180,24 @@ void FOnlineIdentityAtto::GetUserPrivilege(const FUniqueNetId& LocalUserId, cons
 
 FPlatformUserId FOnlineIdentityAtto::GetPlatformUserIdFromUniqueNetId(const FUniqueNetId& UniqueNetId) const
 {
-	for (const auto& [LocalUserNum, LocalUserNetId] : LocalUsers)
-	{
-		if (*LocalUserNetId == UniqueNetId)
-		{
-			return GetPlatformUserIdFromLocalUserNum(LocalUserNum);
-		}
-	}
-
-	return PLATFORMUSERID_NONE;
+	const auto LocalUserNum = GetLocalUserNumFromUniqueNetId(UniqueNetId);
+	return GetPlatformUserIdFromLocalUserNum(LocalUserNum);
 }
 
 FString FOnlineIdentityAtto::GetAuthType() const
 {
 	return TEXT("");
+}
+
+int32 FOnlineIdentityAtto::GetLocalUserNumFromUniqueNetId(const FUniqueNetId& UniqueNetId) const
+{
+	for (const auto& [LocalUserNum, LocalUserNetId] : LocalUsers)
+	{
+		if (*LocalUserNetId == UniqueNetId)
+		{
+			return LocalUserNum;
+		}
+	}
+
+	return INDEX_NONE;
 }
