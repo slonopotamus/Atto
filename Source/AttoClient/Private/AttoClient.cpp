@@ -76,7 +76,7 @@ static TOptional<FAttoFindSessionsParamValue> GetValueFromVariantData(const FVar
 {
 	T Result{};
 	Data.GetValue(Result);
-	return {FAttoFindSessionsParamValue{TInPlaceType<T>{}, Result}};
+	return {FAttoFindSessionsParamValue{TInPlaceType<T>{}, MoveTemp(Result)}};
 }
 
 // FVariantData is just brain-damaged
@@ -128,7 +128,12 @@ void FAttoClient::FindSessionsAsync(const FOnlineSessionSearch& Search)
 		}
 	}
 
-	Send<FAttoFindSessionsRequest>(Params, Search.PlatformHash, Search.MaxSearchResults);
+	FindSessionsAsync(MoveTemp(Params), Search.PlatformHash, Search.MaxSearchResults);
+}
+
+void FAttoClient::FindSessionsAsync(TMap<FName, FAttoFindSessionsParam>&& Params, int32 RequestId, int32 MaxResults)
+{
+	Send<FAttoFindSessionsRequest>(MoveTemp(Params), RequestId, MaxResults);
 }
 
 void FAttoClient::CreateSessionAsync(const FAttoSessionInfo& SessionInfo)

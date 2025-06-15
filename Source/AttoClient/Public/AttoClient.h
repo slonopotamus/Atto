@@ -49,6 +49,8 @@ public:
 
 	void FindSessionsAsync(const FOnlineSessionSearch& Search);
 
+	void FindSessionsAsync(TMap<FName, FAttoFindSessionsParam>&& Params, int32 RequestId, int32 MaxResults);
+
 	void CreateSessionAsync(const FAttoSessionInfo& SessionInfo);
 
 	void UpdateSessionAsync(uint64 SessionId, const FAttoSessionUpdatableInfo& SessionInfo);
