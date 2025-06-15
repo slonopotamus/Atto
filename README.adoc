@@ -74,8 +74,8 @@ $ ./Binaries/<PLATFORM>/<PROJECT_NAME>Server <YOUR_GAME_MAP> -log
 ----
 
 Atto plugin provides a reference `AttoGame` map with `BP_AttoGame` game mode that uses xref:Source/AttoCommon/Public/AttoGameSession.h[AttoGameSession] class.
-*AttoGameSession* is that it auto-creates online session when map is loaded.
-Alternatively, you will need to create online session in your game code.
+*AttoGameSession* auto-creates online session when map is loaded and destroys when map is unloaded.
+Alternatively, you will need to manage online session in your game code.
 
 You might need to specify `-AttoUrl=...` argument if your Atto server is running on a different machine.
 
