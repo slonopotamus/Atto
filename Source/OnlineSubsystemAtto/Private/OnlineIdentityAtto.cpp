@@ -5,6 +5,14 @@
 #include "UniqueNetIdAtto.h"
 #include "UserOnlineAccountAtto.h"
 
+bool FOnlineIdentityAtto::AutoLogin(const int32 LocalUserNum)
+{
+	// TODO: Do not autologin if we are a non-PIE AttoServer, so we do not connect to ourselves
+
+	// TODO: Fill credentials
+	return Login(LocalUserNum, FOnlineAccountCredentials());
+}
+
 bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCredentials& AccountCredentials)
 {
 	if (LocalUserNum < 0 || LocalUserNum > MAX_LOCAL_PLAYERS)
@@ -35,11 +43,14 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 				const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
 				Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
 				LocalUsers.Add(LocalUserNum, UserId);
+
+				UE_LOG_ONLINE(Log, TEXT("Successfully logged into Atto server, userId=%s"), *UserId->ToDebugString());
 				TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
 			}
 			else
 			{
 				const auto& Error = LoginResponse.Get<FString>();
+				UE_LOG_ONLINE(Warning, TEXT("Failed to login to Atto server: %s"), *Error);
 				TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
 			}
 		};
@@ -82,12 +93,6 @@ bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 	TriggerOnLogoutCompleteDelegates(LocalUserNum, true);
 
 	return true;
-}
-
-bool FOnlineIdentityAtto::AutoLogin(const int32 LocalUserNum)
-{
-	// TODO: Fill credentials
-	return Login(LocalUserNum, FOnlineAccountCredentials());
 }
 
 TSharedPtr<FUserOnlineAccount> FOnlineIdentityAtto::GetUserAccount(const FUniqueNetId& UserId) const

@@ -5,8 +5,13 @@
 Atto is an Unreal Engine plugin that implements a minimalistic backend / meta service.
 
 IMPORTANT: Atto is not intended for high-load production use.
-The goal is to have _a_ service for early game development.
+The goal is to have _a_ meta service for early game development.
 
+Atto aims to be fully compatible with Unreal Engine https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-in-unreal-engine[Online Subsystems], so you should not need to write Atto-specific code.
+If you do have for some reason, either you're using OSS API wrong, or there could be a bug in Atto.
+If you're sure it's the latter, consider reporting it to https://github.com/slonopotamus/Atto/issues[Atto issue tracker].
+
+[[features]]
 == Features
 
 * Auto-starts in editor, so it is immediately available for PIE
@@ -14,11 +19,19 @@ The goal is to have _a_ service for early game development.
 * Zero cloud dependencies
 * Absolutely free and open-source
 
-== Supported Unreal OSS features
+[[oss]]
+== Supported Online Subsystem interfaces
 
-* Identities (login, logout)
-* Sessions (create, start, end, destroy, find)
+* https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-identity-interface-in-unreal-engine[Identity] (login, logout)
+* https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-session-interface-in-unreal-engine[Sessions] (create, start, end, destroy, find)
 
+== Futher development ideas
+
+* Persistent data storage
+* Implement more OSS interfaces
+* Add https://dev.epicgames.com/documentation/en-us/unreal-engine/online-services-in-unreal-engine[OnlineServices] implementation
+
+[[command-line]]
 == Command-line options
 
 `-DisableAttoServer`:: Disables AttoServer in cases where it would normally start (for example, in editor).
@@ -30,3 +43,72 @@ The goal is to have _a_ service for early game development.
 `-AttoBindAddress=0.0.0.0`:: Specifies bind address for Atto server
 
 `-AttoUrl=ws://localhost:27777`:: Specifies Atto server address to connect to
+
+[[usage]]
+== Usage scenario
+
+Suppose, you want to start a separate Atto server, connect one or more dedicated servers to it and one or more game clients.
+
+First, https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-dedicated-servers-in-unreal-engine[create client and dedicated server builds of your game].
+
+Now, start Atto server:
+
+[source,shell]
+----
+$ ./Binaries/<PLATFORM>/<PROJECT_NAME>Server AttoServer -EnableAttoServer -log
+----
+
+You may pass <<command-line,additional command-line options>> to configure it.
+
+Verify that Atto server is listening to incoming connections by looking for a relevant log entry:
+
+----
+LogAtto: Atto Server started accepting connections on :27777
+----
+
+Next, start dedicated server instance:
+
+[source,shell]
+----
+$ ./Binaries/<PLATFORM>/<PROJECT_NAME>Server <YOUR_GAME_MAP> -log
+----
+
+Atto plugin provides a reference `AttoGame` map with `BP_AttoGame` game mode that uses xref:Source/AttoCommon/Public/AttoGameSession.h[AttoGameSession] class.
+*AttoGameSession* is that it auto-creates online session when map is loaded.
+Alternatively, you will need to create online session in your game code.
+
+You might need to specify `-AttoUrl=...` argument if your Atto server is running on a different machine.
+
+Ensure that dedicated server has properly connected to Atto server and created online session by looking for a relevant entry in dedicated server logs:
+
+----
+LogOnline: OSS: Atto server url: ws://localhost:27777
+LogOnline: OSS: Created online subsystem instance for: Atto
+LogOnline: OSS: TryLoadSubsystemAndSetDefault: Loaded subsystem for type [Atto]
+...
+LogAtto: Creating game session: GameSession
+LogAtto: OnCreateSessionComplete GameSession bSuccess: 1
+----
+
+Finally, start your game client:
+
+[source,shell]
+----
+$ ./Binaries/<PLATFORM>/<PROJECT_NAME>
+----
+
+You might need to specify `-AttoUrl=...` argument if your Atto server is running on a different machine.
+
+Ensure that client has properly connected to Atto server by looking for a relevant entry in client server logs:
+
+----
+LogOnline: OSS: Atto server url: ws://localhost:27777
+LogOnline: OSS: Created online subsystem instance for: Atto
+LogOnline: OSS: TryLoadSubsystemAndSetDefault: Loaded subsystem for type [Atto]
+...
+LogOnline: OSS: Successfully logged into Atto server, userId=<value>
+----
+
+What's next?
+
+You can use https://github.com/mordentral/AdvancedSessionsPlugin[AdvancedSessions] plugin or built-in https://dev.epicgames.com/documentation/en-us/unreal-engine/online-session-nodes?application_version=4.27[Online Subsystem blueprint nodes] or just use OnlineSubsystem from C++.

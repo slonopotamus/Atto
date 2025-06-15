@@ -16,6 +16,8 @@ class FAttoConnection final : public FNoncopyable
 	FAttoServerInstance& Server;
 	lws* const LwsConnection;
 
+	// TODO: Separate dedicated servers from real users?
+	// TODO: Support multiple users per connection?
 	/** User id of currently logged-in user (if any) */
 	TOptional<uint64> UserId;
 

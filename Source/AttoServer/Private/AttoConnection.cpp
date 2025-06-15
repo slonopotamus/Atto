@@ -95,36 +95,16 @@ void FAttoConnection::SendFromQueueInternal()
 
 void FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
-	if (const auto* Existing = Server.RegisteredUsers.Find(Message.Username))
-	{
-		if (Existing->Password == Message.Password)
-		{
-			UserId = Existing->UserId;
-			// TODO: TInPlaceType is weird
-			Send<FAttoLoginResponse>(TInPlaceType<uint64>(), Existing->UserId);
-		}
-		else
-		{
-			// TODO: TInPlaceType is weird
-			Send<FAttoLoginResponse>(TInPlaceType<FString>(), TEXT("Invalid password"));
-		}
-	}
-	else
-	{
-		const uint64 Id = Server.RegisteredUsers.Num() + 1;
+	// TODO: Check credentials
+	(void)Message.Username;
+	(void)Message.Password;
 
-		Server.RegisteredUsers.Add(
-		    Message.Username,
-		    {
-		        .UserId = Id,
-		        .Password = Message.Password,
-		    });
+	const auto Guid = FGuid::NewGuid();
+	const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));
+	UserId = Id;
 
-		UserId = Id;
-
-		// TODO: TInPlaceType is weird
-		Send<FAttoLoginResponse>(TInPlaceType<uint64>(), Id);
-	}
+	// TODO: TInPlaceType is weird
+	Send<FAttoLoginResponse>(TInPlaceType<uint64>(), Id);
 }
 
 void FAttoConnection::operator()(const FAttoLogoutRequest& Message)

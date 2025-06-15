@@ -13,10 +13,14 @@ class ATTOCOMMON_API AAttoGameSession : public AGameSession
 {
 	GENERATED_BODY()
 
+	FDelegateHandle OnCreateSessionCompleteDelegateHandle;
+
 public:
 	virtual FOnlineSessionSettings BuildSessionSettings() const;
 
 	virtual void RegisterServer() override;
 
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
+
+	virtual void OnCreateSessionComplete(FName InSessionName, bool bWasSuccessful);
 };

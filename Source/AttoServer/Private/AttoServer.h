@@ -6,12 +6,6 @@
 class FAttoConnection;
 class FAttoServer;
 
-struct FAttoRegisteredUser
-{
-	uint64 UserId = 0;
-	FString Password;
-};
-
 class FAttoServerInstance final : FNoncopyable
 {
 	typedef FAttoServerInstance ThisClass;
@@ -32,9 +26,6 @@ class FAttoServerInstance final : FNoncopyable
 
 public:
 	const uint32 MaxFindSessionsResults;
-
-	// TODO: Add persistent storage?
-	TMap<FString, FAttoRegisteredUser> RegisteredUsers;
 
 	TSet<FAttoConnection*> Connections;
 

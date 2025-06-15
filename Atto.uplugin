@@ -7,7 +7,7 @@
 	"CreatedByURL": "https://github.com/slonopotamus",
 	"DocsURL": "https://github.com/slonopotamus/Atto",
 	"MarketplaceURL": "",
-	"CanContainContent": false,
+	"CanContainContent": true,
 	"Modules": [
 		{
 			"Name": "AttoCommon",

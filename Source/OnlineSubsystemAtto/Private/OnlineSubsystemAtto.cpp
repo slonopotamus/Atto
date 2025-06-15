@@ -39,11 +39,22 @@ bool FOnlineSubsystemAtto::Init()
 
 	OnlineAsyncTaskThread = MakeShareable(FRunnableThread::Create(TaskManager.Get(), TEXT("OnlineSubsystemAtto"), 128 * 1024, TPri_Normal));
 
+	// 1. We do not want to connect editor to itself
+	// 2. Dedicated servers will auto-login in AGameSession::ProcessAutoLogin anyway
+	// 3. PIE is handled by bOnlinePIEEnabled
+	if (IsRunningGame())
+	{
+		bool bAutologinAtStartup = true;
+		GConfig->GetBool(TEXT("OnlineSubsystemAtto"), TEXT("bAutoLoginAtStartup"), bAutologinAtStartup, GEngineIni);
+
+		IdentityInterface->AutoLogin(0);
+	}
+
 	return true;
 }
 
 template<typename T>
-static void DestructAttoInterface(T& Interface)
+static void DestructAttoInterface(TSharedPtr<T>& Interface)
 {
 	if (Interface)
 	{

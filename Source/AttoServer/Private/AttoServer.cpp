@@ -24,6 +24,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 				{
 					if (ensure(Connection))
 					{
+						// TODO: Log connection accepted
 						Server->Connections.Add(new (Connection) FAttoConnection{*Server, LwsConnection});
 					}
 					break;
@@ -33,6 +34,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 				{
 					if (ensure(Connection))
 					{
+						// TODO: Log connection closed
 						Server->Connections.Remove(Connection);
 						Connection->~FAttoConnection();
 					}
