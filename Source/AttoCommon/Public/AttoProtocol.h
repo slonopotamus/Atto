@@ -1,11 +1,10 @@
 #pragma once
 #include "OnlineSessionSettings.h"
 
-struct FAttoLoginRequest
+struct ATTOCOMMON_API FAttoLoginRequest
 {
 	FString Username;
 	FString Password;
-	// TODO: Pass credentials
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoLoginRequest& Message)
 	{
@@ -18,7 +17,7 @@ struct FAttoLoginRequest
 
 using FAttoLoginResponse = TVariant<uint64 /* UserId */, FString /* Error */>;
 
-struct FAttoLogoutRequest
+struct ATTOCOMMON_API FAttoLogoutRequest
 {
 	friend FArchive& operator<<(FArchive& Ar, FAttoLogoutRequest& Message)
 	{
@@ -26,7 +25,7 @@ struct FAttoLogoutRequest
 	}
 };
 
-struct FAttoLogoutResponse
+struct ATTOCOMMON_API FAttoLogoutResponse
 {
 	friend FArchive& operator<<(FArchive& Ar, FAttoLogoutResponse& Message)
 	{
@@ -34,12 +33,13 @@ struct FAttoLogoutResponse
 	}
 };
 
-struct FAttoSessionUpdatableInfo
+struct ATTOCOMMON_API FAttoSessionUpdatableInfo
 {
 	int32 NumOpenPublicConnections = 0;
 	int32 NumPublicConnections = 0;
 	EOnlineSessionState::Type State;
 	bool bAllowJoinInProgress = false;
+	bool bShouldAdvertise = false;
 
 	FAttoSessionUpdatableInfo() = default;
 
@@ -48,6 +48,7 @@ struct FAttoSessionUpdatableInfo
 	    , NumPublicConnections{OnlineSession.SessionSettings.NumPublicConnections}
 	    , State{OnlineSession.SessionState}
 	    , bAllowJoinInProgress{OnlineSession.SessionSettings.bAllowJoinInProgress}
+	    , bShouldAdvertise{OnlineSession.SessionSettings.bShouldAdvertise}
 	{}
 
 	void CopyTo(FOnlineSession& OnlineSession, EOnlineSessionState::Type* StatePtr) const
@@ -55,6 +56,7 @@ struct FAttoSessionUpdatableInfo
 		OnlineSession.NumOpenPublicConnections = NumOpenPublicConnections;
 		OnlineSession.SessionSettings.NumPublicConnections = NumPublicConnections;
 		OnlineSession.SessionSettings.bAllowJoinInProgress = bAllowJoinInProgress;
+		OnlineSession.SessionSettings.bShouldAdvertise = bShouldAdvertise;
 
 		if (StatePtr)
 		{
@@ -71,20 +73,50 @@ struct FAttoSessionUpdatableInfo
 		Ar << StateValue;
 		Message.State = static_cast<EOnlineSessionState::Type>(StateValue);
 
+		Ar.SerializeBits(&Message.bAllowJoinInProgress, 1);
+		Ar.SerializeBits(&Message.bShouldAdvertise, 1);
+
 		return Ar;
 	}
 };
 
-struct FAttoSessionInfo
+using FAttoFindSessionsParamValue = TVariant<bool, int32, uint32, int64, uint64, double, FString, float, TArray<uint8>>;
+
+struct ATTOCOMMON_API FAttoFindSessionsParam
+{
+	EOnlineComparisonOp::Type ComparisonOp = EOnlineComparisonOp::Equals;
+	FAttoFindSessionsParamValue Value{TInPlaceType<bool>{}, false};
+	int32 ID = 0;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsParam& Message)
+	{
+		int32 ComparisonOpValue = Message.ComparisonOp;
+		Ar << ComparisonOpValue;
+		Message.ComparisonOp = static_cast<EOnlineComparisonOp::Type>(ComparisonOpValue);
+
+		Ar << Message.Value;
+		Ar << Message.ID;
+		return Ar;
+	}
+};
+
+struct ATTOCOMMON_API FAttoSessionInfo
 {
 	uint64 SessionId = 0;
 	TArray<uint8> HostAddress;
 	int32 Port = 0;
 	int32 BuildUniqueId = 0;
 	FAttoSessionUpdatableInfo UpdatableInfo;
+	// TODO: We could skip sending this when creating session and instead determine whether connection is from dedicated server during Login
+	bool bIsDedicated = false;
 
 	bool IsJoinable() const
 	{
+		if (!UpdatableInfo.bShouldAdvertise)
+		{
+			return false;
+		}
+
 		if (UpdatableInfo.NumOpenPublicConnections < 0)
 		{
 			return false;
@@ -93,6 +125,13 @@ struct FAttoSessionInfo
 		return UpdatableInfo.bAllowJoinInProgress || UpdatableInfo.State != EOnlineSessionState::InProgress;
 	}
 
+	bool IsEmpty() const
+	{
+		return UpdatableInfo.NumOpenPublicConnections >= UpdatableInfo.NumPublicConnections;
+	}
+
+	bool Matches(const TMap<FName, FAttoFindSessionsParam>& Params) const;
+
 	friend FArchive& operator<<(FArchive& Ar, FAttoSessionInfo& Message)
 	{
 		Ar << Message.SessionId;
@@ -100,11 +139,12 @@ struct FAttoSessionInfo
 		Ar << Message.Port;
 		Ar << Message.BuildUniqueId;
 		Ar << Message.UpdatableInfo;
+		Ar << Message.bIsDedicated;
 		return Ar;
 	}
 };
 
-struct FAttoSessionInfoEx
+struct ATTOCOMMON_API FAttoSessionInfoEx
 {
 	uint64 OwningUserId = 0;
 	FAttoSessionInfo Info;
@@ -117,7 +157,7 @@ struct FAttoSessionInfoEx
 	}
 };
 
-struct FAttoCreateSessionRequest
+struct ATTOCOMMON_API FAttoCreateSessionRequest
 {
 	FAttoSessionInfo SessionInfo;
 
@@ -128,7 +168,7 @@ struct FAttoCreateSessionRequest
 	}
 };
 
-struct FAttoUpdateSessionRequest
+struct ATTOCOMMON_API FAttoUpdateSessionRequest
 {
 	uint64 SessionId = 0;
 	FAttoSessionUpdatableInfo SessionInfo;
@@ -140,7 +180,7 @@ struct FAttoUpdateSessionRequest
 	}
 };
 
-struct FAttoUpdateSessionResponse
+struct ATTOCOMMON_API FAttoUpdateSessionResponse
 {
 	bool bSuccess = false;
 
@@ -151,7 +191,7 @@ struct FAttoUpdateSessionResponse
 	}
 };
 
-struct FAttoCreateSessionResponse
+struct ATTOCOMMON_API FAttoCreateSessionResponse
 {
 	bool bSuccess = false;
 
@@ -162,7 +202,7 @@ struct FAttoCreateSessionResponse
 	}
 };
 
-struct FAttoDestroySessionRequest
+struct ATTOCOMMON_API FAttoDestroySessionRequest
 {
 	friend FArchive& operator<<(FArchive& Ar, FAttoDestroySessionRequest& Message)
 	{
@@ -170,7 +210,7 @@ struct FAttoDestroySessionRequest
 	}
 };
 
-struct FAttoDestroySessionResponse
+struct ATTOCOMMON_API FAttoDestroySessionResponse
 {
 	bool bSuccess = false;
 
@@ -181,20 +221,22 @@ struct FAttoDestroySessionResponse
 	}
 };
 
-struct FAttoFindSessionsRequest
+struct ATTOCOMMON_API FAttoFindSessionsRequest
 {
+	TMap<FName, FAttoFindSessionsParam> Params;
 	int32 RequestId = 0;
 	uint32 MaxResults = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsRequest& Message)
 	{
+		Ar << Message.Params;
 		Ar << Message.RequestId;
 		Ar << Message.MaxResults;
 		return Ar;
 	}
 };
 
-struct FAttoFindSessionsResponse
+struct ATTOCOMMON_API FAttoFindSessionsResponse
 {
 	int32 RequestId = 0;
 	TArray<FAttoSessionInfoEx> Sessions;

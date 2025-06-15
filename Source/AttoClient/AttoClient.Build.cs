@@ -9,6 +9,8 @@ public class AttoClient : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"OnlineSubsystem",
+			"OnlineSubsystemUtils",
 			"WebSockets",
 		]);
 	}

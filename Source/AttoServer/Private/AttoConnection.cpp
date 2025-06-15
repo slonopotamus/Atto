@@ -179,8 +179,6 @@ void FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 
 	if (UserId.IsSet())
 	{
-		// TODO: Respect search params
-
 		const auto MaxResults = FMath::Min(Message.MaxResults, Server.MaxFindSessionsResults);
 
 		for (const auto& [OwningUserId, Session] : Server.Sessions)
@@ -190,10 +188,17 @@ void FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 				break;
 			}
 
-			if (Session.IsJoinable())
+			if (!Session.IsJoinable())
 			{
-				Sessions.Emplace(OwningUserId, Session);
+				continue;
 			}
+
+			if (!Session.Matches(Message.Params))
+			{
+				continue;
+			}
+
+			Sessions.Emplace(OwningUserId, Session);
 		}
 	}
 	else
