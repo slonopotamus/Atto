@@ -4,7 +4,8 @@ public class OnlineSubsystemAtto : ModuleRules
 {
 	public OnlineSubsystemAtto(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PublicDependencyModuleNames.AddRange([
+		PublicDependencyModuleNames.AddRange(new[]
+		{
 			"AttoClient",
 			"AttoCommon",
 			"Core",
@@ -13,6 +14,6 @@ public class OnlineSubsystemAtto : ModuleRules
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",
 			"Sockets"
-		]);
+		});
 	}
 }
