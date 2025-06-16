@@ -17,19 +17,27 @@ struct ATTOCOMMON_API FAttoLoginRequest
 
 using FAttoLoginResponse = TVariant<uint64 /* UserId */, FString /* Error */>;
 
-struct ATTOCOMMON_API FAttoLogoutRequest{
-    friend FArchive & operator<<(FArchive& Ar, FAttoLogoutRequest& Message){
-                          return Ar;
-}
-}
-;
+struct ATTOCOMMON_API FAttoLogoutRequest
+{
+	// Workaround to fix clang-format 19 messing up everything
+	bool bDummy = false;
 
-struct ATTOCOMMON_API FAttoLogoutResponse{
-    friend FArchive & operator<<(FArchive& Ar, FAttoLogoutResponse& Message){
-                          return Ar;
-}
-}
-;
+	friend FArchive& operator<<(FArchive& Ar, FAttoLogoutRequest& Message)
+	{
+		return Ar;
+	}
+};
+
+struct ATTOCOMMON_API FAttoLogoutResponse
+{
+	// Workaround to fix clang-format 19 messing up everything
+	bool bDummy = false;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoLogoutResponse& Message)
+	{
+		return Ar;
+	}
+};
 
 struct ATTOCOMMON_API FAttoSessionUpdatableInfo
 {
@@ -202,12 +210,15 @@ struct ATTOCOMMON_API FAttoCreateSessionResponse
 	}
 };
 
-struct ATTOCOMMON_API FAttoDestroySessionRequest{
-    friend FArchive & operator<<(FArchive& Ar, FAttoDestroySessionRequest& Message){
-                          return Ar;
-}
-}
-;
+struct ATTOCOMMON_API FAttoDestroySessionRequest
+{
+	// Workaround to fix clang-format 19 messing up everything
+	bool bDummy = false;
+	friend FArchive& operator<<(FArchive& Ar, FAttoDestroySessionRequest& Message)
+	{
+		return Ar;
+	}
+};
 
 struct ATTOCOMMON_API FAttoDestroySessionResponse
 {
@@ -248,12 +259,16 @@ struct ATTOCOMMON_API FAttoFindSessionsResponse
 	}
 };
 
-struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest{
-    friend FArchive & operator<<(FArchive& Ar, FAttoQueryServerUtcTimeRequest& Message){
-                          return Ar;
-}
-}
-;
+struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
+{
+	// Workaround to fix clang-format 19 messing up everything
+	bool bDummy = false;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoQueryServerUtcTimeRequest& Message)
+	{
+		return Ar;
+	}
+};
 
 struct ATTOCOMMON_API FAttoQueryServerUtcTimeResponse
 {
