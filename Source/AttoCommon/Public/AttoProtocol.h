@@ -17,21 +17,19 @@ struct ATTOCOMMON_API FAttoLoginRequest
 
 using FAttoLoginResponse = TVariant<uint64 /* UserId */, FString /* Error */>;
 
-struct ATTOCOMMON_API FAttoLogoutRequest
-{
-	friend FArchive& operator<<(FArchive& Ar, FAttoLogoutRequest& Message)
-	{
-		return Ar;
-	}
-};
+struct ATTOCOMMON_API FAttoLogoutRequest{
+    friend FArchive & operator<<(FArchive& Ar, FAttoLogoutRequest& Message){
+                          return Ar;
+}
+}
+;
 
-struct ATTOCOMMON_API FAttoLogoutResponse
-{
-	friend FArchive& operator<<(FArchive& Ar, FAttoLogoutResponse& Message)
-	{
-		return Ar;
-	}
-};
+struct ATTOCOMMON_API FAttoLogoutResponse{
+    friend FArchive & operator<<(FArchive& Ar, FAttoLogoutResponse& Message){
+                          return Ar;
+}
+}
+;
 
 struct ATTOCOMMON_API FAttoSessionUpdatableInfo
 {
@@ -204,13 +202,12 @@ struct ATTOCOMMON_API FAttoCreateSessionResponse
 	}
 };
 
-struct ATTOCOMMON_API FAttoDestroySessionRequest
-{
-	friend FArchive& operator<<(FArchive& Ar, FAttoDestroySessionRequest& Message)
-	{
-		return Ar;
-	}
-};
+struct ATTOCOMMON_API FAttoDestroySessionRequest{
+    friend FArchive & operator<<(FArchive& Ar, FAttoDestroySessionRequest& Message){
+                          return Ar;
+}
+}
+;
 
 struct ATTOCOMMON_API FAttoDestroySessionResponse
 {
@@ -227,7 +224,7 @@ struct ATTOCOMMON_API FAttoFindSessionsRequest
 {
 	TMap<FName, FAttoFindSessionsParam> Params;
 	int32 RequestId = 0;
-	uint32 MaxResults = 0;
+	int32 MaxResults = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsRequest& Message)
 	{
@@ -251,13 +248,12 @@ struct ATTOCOMMON_API FAttoFindSessionsResponse
 	}
 };
 
-struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
-{
-	friend FArchive& operator<<(FArchive& Ar, FAttoQueryServerUtcTimeRequest& Message)
-	{
-		return Ar;
-	}
-};
+struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest{
+    friend FArchive & operator<<(FArchive& Ar, FAttoQueryServerUtcTimeRequest& Message){
+                          return Ar;
+}
+}
+;
 
 struct ATTOCOMMON_API FAttoQueryServerUtcTimeResponse
 {

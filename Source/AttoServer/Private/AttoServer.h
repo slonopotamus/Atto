@@ -25,7 +25,7 @@ class FAttoServerInstance final : FNoncopyable
 	bool Tick(float DeltaSeconds);
 
 public:
-	const uint32 MaxFindSessionsResults;
+	const int32 MaxFindSessionsResults;
 
 	TSet<FAttoConnection*> Connections;
 
@@ -41,7 +41,7 @@ class FAttoServer final
 	TOptional<FString> BindAddress;
 	uint32 ReceiveBufferSize = 65536;
 	uint32 ListenPort = Atto::DefaultPort;
-	uint32 MaxFindSessionsResults = 100;
+	int32 MaxFindSessionsResults = 100;
 
 public:
 	[[nodiscard]] FAttoServer& WithBindAddress(FString InBindAddress) &&

@@ -29,7 +29,7 @@ void FAttoConnection::ReceiveInternal(const void* Data, const size_t Size)
 		return;
 	}
 
-	FBitReader Ar{static_cast<const uint8*>(Data), Size * 8};
+	FBitReader Ar{static_cast<const uint8*>(Data), static_cast<int64>(Size * 8)};
 
 	FAttoC2SProtocol Message;
 	Ar << Message;
