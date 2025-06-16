@@ -10,7 +10,7 @@ namespace Atto
 
 	ATTOCOMMON_API TOptional<FString> GetBindAddress(const TCHAR* Stream = FCommandLine::Get());
 
-	ATTOCOMMON_API FString GetConnectUrl(const TCHAR* Stream = FCommandLine::Get());
+	ATTOCOMMON_API TOptional<FString> GetConnectUrl(const TCHAR* Stream = FCommandLine::Get());
 } // namespace Atto
 
 ATTOCOMMON_API DECLARE_LOG_CATEGORY_EXTERN(LogAtto, Log, All);

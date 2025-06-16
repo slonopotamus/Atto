@@ -15,7 +15,6 @@ public:
 
 		if (!Result->Init())
 		{
-			UE_LOG_ONLINE(Warning, TEXT("OnlineSubsystemAtto failed to initialize"));
 			Result->Shutdown();
 			return nullptr;
 		}

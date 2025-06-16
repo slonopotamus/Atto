@@ -81,14 +81,14 @@ Next, start dedicated server instance:
 
 [source,shell]
 ----
-$ ./Binaries/<PLATFORM>/<PROJECT_NAME>Server <YOUR_GAME_MAP> -log
+$ ./Binaries/<PLATFORM>/<PROJECT_NAME>Server <YOUR_GAME_MAP> -AttoUrl=ws://localhost:27777 -log
 ----
 
 Atto plugin provides a reference `AttoGame` map with `BP_AttoGame` game mode that uses xref:Source/AttoCommon/Public/AttoGameSession.h[AttoGameSession] class.
 *AttoGameSession* auto-creates online session when map is loaded and destroys when map is unloaded.
 Alternatively, you will need to manage online session in your game code.
 
-You might need to specify `-AttoUrl=...` argument if your Atto server is running on a different machine.
+You might need to alter `-AttoUrl=...` argument if your Atto server is running on a different port or machine.
 
 Ensure that dedicated server has properly connected to Atto server and created online session by looking for a relevant entry in dedicated server logs:
 
@@ -105,10 +105,10 @@ Finally, start your game client:
 
 [source,shell]
 ----
-$ ./Binaries/<PLATFORM>/<PROJECT_NAME>
+$ ./Binaries/<PLATFORM>/<PROJECT_NAME> -AttoUrl=ws://localhost:27777
 ----
 
-You might need to specify `-AttoUrl=...` argument if your Atto server is running on a different machine.
+You might need to alter `-AttoUrl=...` argument if your Atto server is running on a different port or machine.
 
 Ensure that client has properly connected to Atto server by looking for a relevant entry in client server logs:
 

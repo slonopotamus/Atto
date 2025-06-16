@@ -23,15 +23,20 @@ namespace Atto
 		return {};
 	}
 
-	FString GetConnectUrl(const TCHAR* Stream)
+	TOptional<FString> GetConnectUrl(const TCHAR* Stream)
 	{
 		if (FString Url; FParse::Value(FCommandLine::Get(), TEXT("AttoUrl="), Url))
 		{
 			return Url;
 		}
 
-		const auto BindAddress = GetBindAddress(Stream);
-		return FString::Printf(TEXT("ws://%s:%u"), *BindAddress.Get(TEXT("localhost")), GetPort(Stream));
+		if (GIsEditor)
+		{
+			const auto BindAddress = GetBindAddress(Stream);
+			return FString::Printf(TEXT("ws://%s:%u"), *BindAddress.Get(TEXT("localhost")), GetPort(Stream));
+		}
+
+		return {};
 	}
 } // namespace Atto
 

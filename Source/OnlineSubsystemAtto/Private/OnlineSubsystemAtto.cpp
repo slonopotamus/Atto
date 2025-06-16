@@ -13,8 +13,14 @@ bool FOnlineSubsystemAtto::Init()
 	UE_LOG_ONLINE(VeryVerbose, TEXT("FOnlineSubsystemAtto::Init()"));
 
 	auto ConnectUrl = Atto::GetConnectUrl();
-	UE_LOG_ONLINE(Log, TEXT("Atto server url: %s"), *ConnectUrl);
-	AttoClient = MakeShared<FAttoClient>(MoveTemp(ConnectUrl));
+	if (!ConnectUrl.IsSet())
+	{
+		UE_LOG_ONLINE(Log, TEXT("Atto server url not specified, Atto subsystem will not initialize"));
+		return false;
+	}
+
+	UE_LOG_ONLINE(Log, TEXT("Atto server url: %s"), **ConnectUrl);
+	AttoClient = MakeShared<FAttoClient>(MoveTemp(*ConnectUrl));
 
 	AttoClient->OnConnectionError.AddLambda([](const FString& Error) {
 		// TODO: We need better error handling. Currently, login callbacks will not be called if this happens
@@ -36,6 +42,7 @@ bool FOnlineSubsystemAtto::Init()
 
 	if (!TaskManager->Init())
 	{
+		UE_LOG_ONLINE(Error, TEXT("Failed to init Atto TaskManager"));
 		return false;
 	}
 
