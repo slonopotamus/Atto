@@ -11,6 +11,11 @@ Atto aims to be fully compatible with Unreal Engine https://dev.epicgames.com/do
 If you do have for some reason, either you're using OSS API wrong, or there could be a bug in Atto.
 If you're sure it's the latter, consider reporting it to https://github.com/slonopotamus/Atto/issues[Atto issue tracker].
 
+== Dependencies
+
+This project relies on C++20 features.
+Tested against Unreal Engine 5.5.
+
 [[features]]
 == Features
 
