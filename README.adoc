@@ -41,9 +41,9 @@ Tested against Unreal Engine 5.5.
 [[command-line]]
 == Command-line options
 
-`-DisableAttoServer`:: Disables AttoServer in cases where it would normally start (for example, in editor).
+`-DisableAttoServer`:: Disables Atto server in cases where it would normally start (for example, in editor).
 
-`-EnableAttoServer`:: Enables AttoServer in cases where it would normally not start (for example, game client)
+`-EnableAttoServer`:: Enables Atto server in cases where it would normally not start (for example, game client)
 
 `-AttoListenPort=27777`:: Specifies network port for Atto server
 
