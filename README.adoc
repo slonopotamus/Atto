@@ -51,6 +51,10 @@ Tested against Unreal Engine 5.5.
 
 `-AttoUrl=ws://localhost:27777`:: Specifies Atto server address to connect to
 
+`-AttoPublicAddress=<ip_address>`:: When creating online session, this parameter allows specifying which IP address it will announce for incoming connections
+
+`-AttoPublicPort=<port>`:: When creating online session, this parameter allows specifying which network port it will announce for incoming connections
+
 [[usage]]
 == Usage scenario
 

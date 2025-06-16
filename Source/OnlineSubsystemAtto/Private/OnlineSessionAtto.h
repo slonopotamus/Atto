@@ -25,6 +25,9 @@ class FOnlineSessionAtto final : public IOnlineSession
 
 	void OnFindSessionsResponse(const FAttoFindSessionsResponse& Message);
 
+	static TSharedRef<FInternetAddr> DetermineSessionPublicAddress();
+	int32 DetermineSessionPublicPort() const;
+
 protected:
 	virtual FNamedOnlineSession* AddNamedSession(FName SessionName, const FOnlineSessionSettings& SessionSettings) override;
 

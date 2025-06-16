@@ -117,21 +117,9 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 			// TODO: Who is responsible for generating session ids?
 			const auto SessionId = FUniqueNetIdAtto::Create(CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid)));
 
-			bool bCanBindAll;
-			const auto HostAddress = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetLocalHostAddr(*GLog, bCanBindAll);
-			// The below is a workaround for systems that set hostname to a distinct address from 127.0.0.1 on a loopback interface.
-			// See e.g. https://www.debian.org/doc/manuals/debian-reference/ch05.en.html#_the_hostname_resolution
-			// and http://serverfault.com/questions/363095/why-does-my-hostname-appear-with-the-address-127-0-1-1-rather-than-127-0-0-1-in
-			// Since we bind to 0.0.0.0, we won't answer on 127.0.1.1, so we need to advertise ourselves as 127.0.0.1 for any other loopback address we may have.
-			uint32 HostIp = 0;
-			HostAddress->GetIp(HostIp); // will return in host order
-			// if this address is on loopback interface, advertise it as 127.0.0.1
-			if ((HostIp & 0xff000000) == 0x7f000000)
-			{
-				HostAddress->SetIp(0x7f000001); // 127.0.0.1
-			}
-
-			HostAddress->SetPort(GetPortFromNetDriver(Subsystem.GetInstanceName()));
+			// TODO: Maybe this should better be passed via session settings instead of command-line args?
+			const auto& HostAddress = DetermineSessionPublicAddress();
+			HostAddress->SetPort(DetermineSessionPublicPort());
 
 			const auto Session = AddNamedSession(SessionName, NewSessionSettings);
 			Session->bHosting = true;
@@ -369,6 +357,47 @@ void FOnlineSessionAtto::OnFindSessionsResponse(const FAttoFindSessionsResponse&
 	}
 
 	TriggerOnFindSessionsCompleteDelegates(true);
+}
+
+TSharedRef<FInternetAddr> FOnlineSessionAtto::DetermineSessionPublicAddress()
+{
+	if (FString PublicAddress; FParse::Value(FCommandLine::Get(), TEXT("AttoPublicAddress="), PublicAddress))
+	{
+		if (const auto& Result = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetAddressFromString(PublicAddress))
+		{
+			return Result.ToSharedRef();
+		}
+
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Failed to parse -AttoPublicAddress=... as FInternetAddress: %s"), *PublicAddress);
+	}
+
+	bool bCanBindAll;
+	const auto HostAddress = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetLocalHostAddr(*GLog, bCanBindAll);
+
+	// The below is a workaround for systems that set hostname to a distinct address from 127.0.0.1 on a loopback interface.
+	// See e.g. https://www.debian.org/doc/manuals/debian-reference/ch05.en.html#_the_hostname_resolution
+	// and http://serverfault.com/questions/363095/why-does-my-hostname-appear-with-the-address-127-0-1-1-rather-than-127-0-0-1-in
+	// Since we bind to 0.0.0.0, we won't answer on 127.0.1.1, so we need to advertise ourselves as 127.0.0.1 for any other loopback address we may have.
+	uint32 HostIp = 0;
+	HostAddress->GetIp(HostIp); // will return in host order
+
+	// if this address is on loopback interface, advertise it as 127.0.0.1
+	if ((HostIp & 0xff000000) == 0x7f000000)
+	{
+		HostAddress->SetIp(0x7f000001); // 127.0.0.1
+	}
+
+	return HostAddress;
+}
+
+int32 FOnlineSessionAtto::DetermineSessionPublicPort() const
+{
+	if (int HostPort = 0; FParse::Value(FCommandLine::Get(), TEXT("AttoListenPort="), HostPort))
+	{
+		return HostPort;
+	}
+
+	return GetPortFromNetDriver(Subsystem.GetInstanceName());
 }
 
 bool FOnlineSessionAtto::FindSessionById(const FUniqueNetId& SearchingUserId, const FUniqueNetId& SessionId, const FUniqueNetId& FriendId, const FOnSingleSessionResultCompleteDelegate& CompletionDelegate)
