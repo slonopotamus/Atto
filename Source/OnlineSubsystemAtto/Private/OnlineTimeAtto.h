@@ -11,7 +11,10 @@ class FOnlineTimeAtto final : public IOnlineTime
 	TOptional<FDateTime> LastServerUtcTime;
 
 public:
-	explicit FOnlineTimeAtto(FOnlineSubsystemAtto& Subsystem);
+	explicit FOnlineTimeAtto(FOnlineSubsystemAtto& Subsystem)
+	    : Subsystem(Subsystem)
+	{
+	}
 
 	virtual bool QueryServerUtcTime() override;
 

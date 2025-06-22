@@ -7,15 +7,36 @@
 FAttoClient::FAttoClient(const FString& Url)
     : WebSocket{FWebSocketsModule::Get().CreateWebSocket(Url, Atto::Protocol)}
 {
-	WebSocket->OnConnected().AddLambda([&] {
-		OnConnected.Broadcast();
+	WebSocket->OnConnected().AddLambda([=, this] {
+		for (const auto& Promise : ConnectPromises)
+		{
+			Promise->SetValue(true);
+		}
+
+		ConnectPromises.Empty();
 	});
 
-	WebSocket->OnClosed().AddLambda([&](int32 StatusCode, const FString& Reason, const bool bWasClean) { OnDisconnected.Broadcast(Reason, bWasClean); });
+	WebSocket->OnConnectionError().AddLambda([=, this](const FString& Error) {
+		// TODO: Log error?
 
-	WebSocket->OnConnectionError().AddLambda([&](const FString& Error) { OnConnectionError.Broadcast(Error); });
+		for (const auto& Promise : ConnectPromises)
+		{
+			Promise->SetValue(false);
+		}
 
-	WebSocket->OnBinaryMessage().AddLambda([&](const void* Data, const size_t Size, const bool bIsLastFragment) {
+		ConnectPromises.Empty();
+	});
+
+	WebSocket->OnClosed().AddLambda([=, this](int32 StatusCode, const FString& Reason, const bool bWasClean) {
+		for (const auto& [_, Promise] : RequestPromises)
+		{
+			Promise->HandleDisconnect();
+		}
+		RequestPromises.Empty();
+		OnDisconnected.Broadcast(Reason, bWasClean);
+	});
+
+	WebSocket->OnBinaryMessage().AddLambda([=, this](const void* Data, const size_t Size, const bool bIsLastFragment) {
 		if (!ensure(bIsLastFragment))
 		{
 			return;
@@ -23,19 +44,39 @@ FAttoClient::FAttoClient(const FString& Url)
 
 		FBitReader Ar{static_cast<const uint8*>(Data), static_cast<int64>(Size * 8)};
 
+		int64 RequestId = 0;
+		Ar << RequestId;
 		FAttoS2CProtocol Message;
 		Ar << Message;
 
-		if (ensure(!Ar.IsError()))
+		if (ensure(!Ar.IsError()) && ensure(Ar.GetBitsLeft() == 0))
 		{
-			Visit([&](auto& Variant) { this->operator()(Variant); }, Message);
+			if (TUniquePtr<IRequestPromise> RequestPromise; ensure(RequestPromises.RemoveAndCopyValue(RequestId, RequestPromise)))
+			{
+				RequestPromise->Handle(MoveTemp(Message));
+			}
 		}
 	});
 }
 
-void FAttoClient::ConnectAsync()
+FAttoClient::~FAttoClient()
 {
+	for (const auto& Promise : ConnectPromises)
+	{
+		Promise->SetValue(false);
+	}
+}
+
+TFuture<bool> FAttoClient::ConnectAsync()
+{
+	if (IsConnected())
+	{
+		return MakeFulfilledPromise<bool>(true).GetFuture();
+	}
+
+	const auto Promise = ConnectPromises.Add_GetRef(MakeShared<TPromise<bool>>());
 	WebSocket->Connect();
+	return Promise->GetFuture();
 }
 
 void FAttoClient::Disconnect()
@@ -43,11 +84,12 @@ void FAttoClient::Disconnect()
 	WebSocket->Close();
 }
 
-void FAttoClient::Send(FAttoC2SProtocol&& Message)
+void FAttoClient::Send(int64 RequestId, FAttoC2SProtocol&& Message)
 {
 	// TODO: Store writer between calls to reduce allocations?
 	FBitWriter Ar{0, true};
 
+	Ar << RequestId;
 	Ar << Message;
 
 	if (ensure(!Ar.IsError()))
@@ -59,16 +101,6 @@ void FAttoClient::Send(FAttoC2SProtocol&& Message)
 bool FAttoClient::IsConnected() const
 {
 	return WebSocket->IsConnected();
-}
-
-void FAttoClient::LoginAsync(FString Username, FString Password)
-{
-	Send<FAttoLoginRequest>(MoveTemp(Username), MoveTemp(Password));
-}
-
-void FAttoClient::LogoutAsync()
-{
-	Send<FAttoLogoutRequest>();
 }
 
 template<typename T>
@@ -116,7 +148,7 @@ static TOptional<FAttoFindSessionsParamValue> ConvertVariantData(const FVariantD
 	}
 }
 
-void FAttoClient::FindSessionsAsync(const FOnlineSessionSearch& Search)
+TFuture<UE::Online::TOnlineResult<FAttoFindSessionsRequest>> FAttoClient::FindSessionsAsync(const FOnlineSessionSearch& Search)
 {
 	TMap<FName, FAttoFindSessionsParam> Params;
 
@@ -128,65 +160,5 @@ void FAttoClient::FindSessionsAsync(const FOnlineSessionSearch& Search)
 		}
 	}
 
-	FindSessionsAsync(MoveTemp(Params), Search.PlatformHash, Search.MaxSearchResults);
-}
-
-void FAttoClient::FindSessionsAsync(TMap<FName, FAttoFindSessionsParam>&& Params, int32 RequestId, int32 MaxResults)
-{
-	Send<FAttoFindSessionsRequest>(MoveTemp(Params), RequestId, MaxResults);
-}
-
-void FAttoClient::CreateSessionAsync(const FAttoSessionInfo& SessionInfo)
-{
-	Send<FAttoCreateSessionRequest>(SessionInfo);
-}
-
-void FAttoClient::UpdateSessionAsync(uint64 SessionId, const FAttoSessionUpdatableInfo& SessionInfo)
-{
-	Send<FAttoUpdateSessionRequest>(SessionId, SessionInfo);
-}
-
-void FAttoClient::DestroySessionAsync()
-{
-	Send<FAttoDestroySessionRequest>();
-}
-
-void FAttoClient::QueryServerUtcTimeAsync()
-{
-	Send<FAttoQueryServerUtcTimeRequest>();
-}
-
-void FAttoClient::operator()(const FAttoLoginResponse& Message)
-{
-	OnLoginResponse.Broadcast(Message);
-}
-
-void FAttoClient::operator()(const FAttoLogoutResponse& Message)
-{
-	OnLogoutResponse.Broadcast();
-}
-
-void FAttoClient::operator()(const FAttoCreateSessionResponse& Message)
-{
-	OnCreateSessionResponse.Broadcast(Message.bSuccess);
-}
-
-void FAttoClient::operator()(const FAttoUpdateSessionResponse& Message)
-{
-	OnUpdateSessionResponse.Broadcast(Message.bSuccess);
-}
-
-void FAttoClient::operator()(const FAttoDestroySessionResponse& Message)
-{
-	OnDestroySessionResponse.Broadcast(Message.bSuccess);
-}
-
-void FAttoClient::operator()(const FAttoFindSessionsResponse& Message)
-{
-	OnFindSessionsResponse.Broadcast(Message);
-}
-
-void FAttoClient::operator()(const FAttoQueryServerUtcTimeResponse& Message)
-{
-	OnServerUtcTime.Broadcast(Message.ServerTime);
+	return Send<FAttoFindSessionsRequest>(MoveTemp(Params), Search.MaxSearchResults);
 }

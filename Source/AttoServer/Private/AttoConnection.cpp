@@ -31,12 +31,19 @@ void FAttoConnection::ReceiveInternal(const void* Data, const size_t Size)
 
 	FBitReader Ar{static_cast<const uint8*>(Data), static_cast<int64>(Size * 8)};
 
+	int64 RequestId = 0;
+	Ar << RequestId;
 	FAttoC2SProtocol Message;
 	Ar << Message;
 
-	if (ensure(!Ar.IsError()))
+	if (ensure(!Ar.IsError()) && ensure(Ar.GetBitsLeft() == 0))
 	{
-		Visit([&](auto& Variant) { operator()(Variant); }, Message);
+		Visit(
+		    [&]<typename RequestType>(const RequestType& Variant) {
+			    static_assert(std::is_same_v<typename RequestType::Result, decltype(operator()(Variant))>);
+			    Send(RequestId, FAttoS2CProtocol{TInPlaceType<typename RequestType::Result>{}, operator()(Variant)});
+		    },
+		    Message);
 	}
 	else
 	{
@@ -64,11 +71,12 @@ void FAttoConnection::Send(const void* Data, const size_t Size)
 	lws_callback_on_writable(LwsConnection);
 }
 
-void FAttoConnection::Send(FAttoS2CProtocol&& Message)
+void FAttoConnection::Send(int64 RequestId, FAttoS2CProtocol&& Message)
 {
 	// TODO: Store writer between calls to reduce allocations?
 	FBitWriter Ar{0, true};
 
+	Ar << RequestId;
 	Ar << Message;
 
 	if (ensure(!Ar.IsError()))
@@ -93,7 +101,7 @@ void FAttoConnection::SendFromQueueInternal()
 	}
 }
 
-void FAttoConnection::operator()(const FAttoLoginRequest& Message)
+FAttoLoginRequest::Result FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
 	// TODO: Check credentials
 	(void)Message.Username;
@@ -104,10 +112,10 @@ void FAttoConnection::operator()(const FAttoLoginRequest& Message)
 	UserId = Id;
 
 	// TODO: TInPlaceType is weird
-	Send<FAttoLoginResponse>(TInPlaceType<uint64>(), Id);
+	return FAttoLoginRequest::Result{TInPlaceType<uint64>(), Id};
 }
 
-void FAttoConnection::operator()(const FAttoLogoutRequest& Message)
+FAttoLogoutRequest::Result FAttoConnection::operator()(const FAttoLogoutRequest& Message)
 {
 	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
 	{
@@ -115,38 +123,32 @@ void FAttoConnection::operator()(const FAttoLogoutRequest& Message)
 	}
 
 	UserId.Reset();
-	Send<FAttoLogoutResponse>();
+	return {true};
 }
 
-void FAttoConnection::operator()(const FAttoCreateSessionRequest& Message)
+FAttoCreateSessionRequest::Result FAttoConnection::operator()(const FAttoCreateSessionRequest& Message)
 {
-	bool bSuccess = false;
-
 	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
 	{
 		// TODO: Check if entry already exists?
 		// TODO: Should we allow to create multiple sessions simultaneously?
 		Server.Sessions.Add(*UserIdPtr, Message.SessionInfo);
-		bSuccess = true;
-	}
-	else
-	{
-		// TODO: Disconnect them?
+		return {true};
 	}
 
-	Send<FAttoCreateSessionResponse>(bSuccess);
+	// TODO: Disconnect them?
+
+	return {false};
 }
 
-void FAttoConnection::operator()(const FAttoUpdateSessionRequest& Message)
+FAttoUpdateSessionRequest::Result FAttoConnection::operator()(const FAttoUpdateSessionRequest& Message)
 {
-	bool bSuccess = false;
-
 	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
 	{
 		if (auto* Session = Server.Sessions.Find(*UserIdPtr))
 		{
 			Session->UpdatableInfo = Message.SessionInfo;
-			bSuccess = true;
+			return {true};
 		}
 	}
 	else
@@ -154,26 +156,21 @@ void FAttoConnection::operator()(const FAttoUpdateSessionRequest& Message)
 		// TODO: Disconnect them?
 	}
 
-	Send<FAttoUpdateSessionResponse>(bSuccess);
+	return {false};
 }
 
-void FAttoConnection::operator()(const FAttoDestroySessionRequest& Message)
+FAttoDestroySessionRequest::Result FAttoConnection::operator()(const FAttoDestroySessionRequest& Message)
 {
-	bool bSuccess = false;
-
 	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
 	{
-		bSuccess = Server.Sessions.Remove(*UserIdPtr) > 0;
-	}
-	else
-	{
-		// TODO: Disconnect them?
+		return {Server.Sessions.Remove(*UserIdPtr) > 0};
 	}
 
-	Send<FAttoDestroySessionResponse>(bSuccess);
+	// TODO: Disconnect them?
+	return {false};
 }
 
-void FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
+FAttoFindSessionsRequest::Result FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 {
 	TArray<FAttoSessionInfoEx> Sessions;
 
@@ -206,10 +203,10 @@ void FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 		// TODO: Disconnect them?
 	}
 
-	Send<FAttoFindSessionsResponse>(Message.RequestId, MoveTemp(Sessions));
+	return {Message.RequestId, MoveTemp(Sessions)};
 }
 
-void FAttoConnection::operator()(const FAttoQueryServerUtcTimeRequest& Message)
+FAttoQueryServerUtcTimeRequest::Result FAttoConnection::operator()(const FAttoQueryServerUtcTimeRequest& Message)
 {
-	Send<FAttoQueryServerUtcTimeResponse>(FDateTime::UtcNow());
+	return {FDateTime::UtcNow()};
 }

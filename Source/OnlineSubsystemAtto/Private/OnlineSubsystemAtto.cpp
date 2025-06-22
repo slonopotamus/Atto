@@ -22,11 +22,6 @@ bool FOnlineSubsystemAtto::Init()
 	UE_LOG_ONLINE(Log, TEXT("Atto server url: %s"), **ConnectUrl);
 	AttoClient = MakeShared<FAttoClient>(MoveTemp(*ConnectUrl));
 
-	AttoClient->OnConnectionError.AddLambda([](const FString& Error) {
-		// TODO: We need better error handling. Currently, login callbacks will not be called if this happens
-		UE_LOG(LogAtto, Error, TEXT("Failed to connect to Atto server: %s"), *Error);
-	});
-
 	AttoClient->OnDisconnected.AddLambda([](const FString& Error, const bool bWasClean) {
 		// TODO: We need better error handling
 		// 1. Current in-flight requests callbacks will never be called
