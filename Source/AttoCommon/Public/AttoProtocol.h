@@ -1,9 +1,11 @@
 #pragma once
+
 #include "OnlineSessionSettings.h"
 
 struct ATTOCOMMON_API FAttoLoginRequest
 {
 	FString Username;
+
 	FString Password;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoLoginRequest& Message)
@@ -13,9 +15,9 @@ struct ATTOCOMMON_API FAttoLoginRequest
 
 		return Ar;
 	}
-};
 
-using FAttoLoginResponse = TVariant<uint64 /* UserId */, FString /* Error */>;
+	using Result = TVariant<uint64 /* UserId */, FString /* Error */>;
+};
 
 struct ATTOCOMMON_API FAttoLogoutRequest
 {
@@ -26,17 +28,17 @@ struct ATTOCOMMON_API FAttoLogoutRequest
 	{
 		return Ar;
 	}
-};
 
-struct ATTOCOMMON_API FAttoLogoutResponse
-{
-	// Workaround to fix clang-format 19 messing up everything
-	bool bDummy = false;
-
-	friend FArchive& operator<<(FArchive& Ar, FAttoLogoutResponse& Message)
+	struct ATTOCOMMON_API Result
 	{
-		return Ar;
-	}
+		bool bSuccess = false;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar.SerializeBits(&Message.bSuccess, 1);
+			return Ar;
+		}
+	};
 };
 
 struct ATTOCOMMON_API FAttoSessionUpdatableInfo
@@ -174,11 +176,23 @@ struct ATTOCOMMON_API FAttoCreateSessionRequest
 		Ar << Message.SessionInfo;
 		return Ar;
 	}
+
+	struct ATTOCOMMON_API Result
+	{
+		bool bSuccess = false;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar.SerializeBits(&Message.bSuccess, 1);
+			return Ar;
+		}
+	};
 };
 
 struct ATTOCOMMON_API FAttoUpdateSessionRequest
 {
 	uint64 SessionId = 0;
+
 	FAttoSessionUpdatableInfo SessionInfo;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoUpdateSessionRequest& Message)
@@ -186,55 +200,47 @@ struct ATTOCOMMON_API FAttoUpdateSessionRequest
 		Ar << Message.SessionInfo;
 		return Ar;
 	}
-};
 
-struct ATTOCOMMON_API FAttoUpdateSessionResponse
-{
-	bool bSuccess = false;
-
-	friend FArchive& operator<<(FArchive& Ar, FAttoUpdateSessionResponse& Message)
+	struct ATTOCOMMON_API Result
 	{
-		Ar.SerializeBits(&Message.bSuccess, 1);
-		return Ar;
-	}
-};
+		bool bSuccess = false;
 
-struct ATTOCOMMON_API FAttoCreateSessionResponse
-{
-	bool bSuccess = false;
-
-	friend FArchive& operator<<(FArchive& Ar, FAttoCreateSessionResponse& Message)
-	{
-		Ar.SerializeBits(&Message.bSuccess, 1);
-		return Ar;
-	}
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar.SerializeBits(&Message.bSuccess, 1);
+			return Ar;
+		}
+	};
 };
 
 struct ATTOCOMMON_API FAttoDestroySessionRequest
 {
 	// Workaround to fix clang-format 19 messing up everything
 	bool bDummy = false;
+
 	friend FArchive& operator<<(FArchive& Ar, FAttoDestroySessionRequest& Message)
 	{
 		return Ar;
 	}
-};
 
-struct ATTOCOMMON_API FAttoDestroySessionResponse
-{
-	bool bSuccess = false;
-
-	friend FArchive& operator<<(FArchive& Ar, FAttoDestroySessionResponse& Message)
+	struct ATTOCOMMON_API Result
 	{
-		Ar.SerializeBits(&Message.bSuccess, 1);
-		return Ar;
-	}
+		bool bSuccess = false;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar.SerializeBits(&Message.bSuccess, 1);
+			return Ar;
+		}
+	};
 };
 
 struct ATTOCOMMON_API FAttoFindSessionsRequest
 {
 	TMap<FName, FAttoFindSessionsParam> Params;
+
 	int32 RequestId = 0;
+
 	int32 MaxResults = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsRequest& Message)
@@ -244,19 +250,21 @@ struct ATTOCOMMON_API FAttoFindSessionsRequest
 		Ar << Message.MaxResults;
 		return Ar;
 	}
-};
 
-struct ATTOCOMMON_API FAttoFindSessionsResponse
-{
-	int32 RequestId = 0;
-	TArray<FAttoSessionInfoEx> Sessions;
-
-	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsResponse& Message)
+	struct ATTOCOMMON_API Result
 	{
-		Ar << Message.RequestId;
-		Ar << Message.Sessions;
-		return Ar;
-	}
+		int32 RequestId = 0;
+
+		TArray<FAttoSessionInfoEx> Sessions;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar << Message.RequestId;
+			Ar << Message.Sessions;
+
+			return Ar;
+		}
+	};
 };
 
 struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
@@ -268,17 +276,17 @@ struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
 	{
 		return Ar;
 	}
-};
 
-struct ATTOCOMMON_API FAttoQueryServerUtcTimeResponse
-{
-	FDateTime ServerTime;
-
-	friend FArchive& operator<<(FArchive& Ar, FAttoQueryServerUtcTimeResponse& Message)
+	struct ATTOCOMMON_API Result
 	{
-		Ar << Message.ServerTime;
-		return Ar;
-	}
+		FDateTime ServerTime;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar << Message.ServerTime;
+			return Ar;
+		}
+	};
 };
 
 using FAttoC2SProtocol = TVariant<
@@ -290,10 +298,11 @@ using FAttoC2SProtocol = TVariant<
     FAttoFindSessionsRequest,
     FAttoQueryServerUtcTimeRequest>;
 
-using FAttoS2CProtocol = TVariant<FAttoLoginResponse,
-                                  FAttoLogoutResponse,
-                                  FAttoCreateSessionResponse,
-                                  FAttoUpdateSessionResponse,
-                                  FAttoDestroySessionResponse,
-                                  FAttoFindSessionsResponse,
-                                  FAttoQueryServerUtcTimeResponse>;
+using FAttoS2CProtocol = TVariant<
+    FAttoLoginRequest::Result,
+    FAttoLogoutRequest::Result,
+    FAttoCreateSessionRequest::Result,
+    FAttoUpdateSessionRequest::Result,
+    FAttoDestroySessionRequest::Result,
+    FAttoFindSessionsRequest::Result,
+    FAttoQueryServerUtcTimeRequest::Result>;

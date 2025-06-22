@@ -2,6 +2,9 @@
 
 #include "AttoProtocol.h"
 #include "IWebSocket.h"
+#include "Online/OnlineError.h"
+#include "Online/OnlineErrorDefinitions.h"
+#include "Online/OnlineResult.h"
 
 class FOnlineSessionSearch;
 
@@ -11,83 +14,110 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 
 	TSharedRef<IWebSocket> WebSocket;
 
-	void operator()(const FAttoLoginResponse& Message);
+	void Send(int64 RequestId, FAttoC2SProtocol&& Message);
 
-	void operator()(const FAttoLogoutResponse& Message);
-
-	void operator()(const FAttoCreateSessionResponse& Message);
-
-	void operator()(const FAttoUpdateSessionResponse& Message);
-
-	void operator()(const FAttoDestroySessionResponse& Message);
-
-	void operator()(const FAttoFindSessionsResponse& Message);
-
-	void operator()(const FAttoQueryServerUtcTimeResponse& Message);
-
-	void Send(FAttoC2SProtocol&& Message);
-
-	template<
-	    typename V,
-	    typename... ArgTypes
-	        UE_REQUIRES(std::is_constructible_v<V, ArgTypes...>)>
-	void Send(ArgTypes&&... Args)
+	struct IRequestPromise : FNoncopyable
 	{
-		Send(FAttoC2SProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
-	}
+		virtual ~IRequestPromise() = default;
+
+		virtual void Handle(FAttoS2CProtocol&& Response) = 0;
+
+		virtual void HandleDisconnect() = 0;
+	};
+
+	template<typename T>
+	struct TRequestPromise final : IRequestPromise
+	{
+		TSharedPtr<TPromise<UE::Online::TOnlineResult<T>>> Promise = MakeShared<TPromise<UE::Online::TOnlineResult<T>>>();
+
+		virtual void Handle(FAttoS2CProtocol&& Response) override
+		{
+			if (ensure(Promise))
+			{
+				if (typename T::Result* Result = Response.TryGet<typename T::Result>(); ensure(Result))
+				{
+					Promise->SetValue(UE::Online::TOnlineResult<T>{MoveTemp(*Result)});
+				}
+				else
+				{
+					Promise->SetValue(
+					    UE::Online::TOnlineResult<T>{
+					        UE::Online::FOnlineError{
+					            UE::Online::Errors::ErrorCode::Common::CantParse}});
+				}
+			}
+
+			Promise = nullptr;
+		}
+
+		virtual void HandleDisconnect() override
+		{
+			if (Promise)
+			{
+				Promise->SetValue(
+				    UE::Online::TOnlineResult<T>{
+				        UE::Online::FOnlineError{
+				            UE::Online::Errors::ErrorCode::Common::RequestFailure}});
+			}
+
+			Promise = nullptr;
+		}
+
+		virtual ~TRequestPromise() override
+		{
+			if (Promise)
+			{
+				Promise->SetValue(
+				    UE::Online::TOnlineResult<T>{
+				        UE::Online::FOnlineError{
+				            UE::Online::Errors::ErrorCode::Common::Cancelled}});
+			}
+
+			Promise = nullptr;
+		}
+	};
+
+	TArray<TSharedRef<TPromise<bool>>> ConnectPromises;
+
+	TMap<int64, TUniquePtr<IRequestPromise>> RequestPromises;
+
+	int64 LastRequestId = 0;
 
 public:
 	explicit FAttoClient(const FString& Url);
 
-	void ConnectAsync();
+	~FAttoClient();
+
+	TFuture<bool> ConnectAsync();
 
 	[[nodiscard]] bool IsConnected() const;
 
 	void Disconnect();
 
-	void LoginAsync(FString Username, FString Password);
-
-	void LogoutAsync();
-
-	void FindSessionsAsync(const FOnlineSessionSearch& Search);
-
-	void FindSessionsAsync(TMap<FName, FAttoFindSessionsParam>&& Params, int32 RequestId, int32 MaxResults);
-
-	void CreateSessionAsync(const FAttoSessionInfo& SessionInfo);
-
-	void UpdateSessionAsync(uint64 SessionId, const FAttoSessionUpdatableInfo& SessionInfo);
-
-	void DestroySessionAsync();
-
-	void QueryServerUtcTimeAsync();
-
-	DECLARE_EVENT(FAttoClient, FAttoConnectedEvent);
-	FAttoConnectedEvent OnConnected;
-
-	DECLARE_EVENT_OneParam(FAttoClient, FAttoLoginEvent, const FAttoLoginResponse&);
-	FAttoLoginEvent OnLoginResponse;
-
-	DECLARE_EVENT(FAttoClient, FAttoLogoutEvent);
-	FAttoLogoutEvent OnLogoutResponse;
-
-	DECLARE_EVENT_OneParam(FAttoClient, FAttoSessionCreatedEvent, bool /* bSuccess */);
-	FAttoSessionCreatedEvent OnCreateSessionResponse;
-
-	DECLARE_EVENT_OneParam(FAttoClient, FAttoSessionUpdatedEvent, bool /* bSuccess */);
-	FAttoSessionUpdatedEvent OnUpdateSessionResponse;
-
-	DECLARE_EVENT_OneParam(FAttoClient, FAttoSessionDestroyedEvent, bool /* bSuccess */);
-	FAttoSessionDestroyedEvent OnDestroySessionResponse;
-
-	DECLARE_EVENT_OneParam(FAttoClient, FAttoFindSessionsEvent, const FAttoFindSessionsResponse& /* Response */);
-	FAttoFindSessionsEvent OnFindSessionsResponse;
-
-	DECLARE_EVENT_OneParam(FAttoClient, FAttoServerUtcTimeEvent, const FDateTime& ServerUtcTime);
-	FAttoServerUtcTimeEvent OnServerUtcTime;
-
 	DECLARE_EVENT_TwoParams(FAttoClient, FAttoDisconnectedEvent, const FString& /* Reason */, bool /* bWasClean */);
 	FAttoDisconnectedEvent OnDisconnected;
 
-	DECLARE_EVENT_OneParam(FAttoClient, FAttoConnectionErrorEvent, const FString& /* Error */);
-	FAttoConnectionErrorEvent OnConnectionError;
+	template<
+	    typename T,
+	    typename... ArgTypes
+	        UE_REQUIRES(std::is_constructible_v<T, ArgTypes...>)>
+	TFuture<UE::Online::TOnlineResult<T>> Send(ArgTypes&&... Args)
+	{
+		if (!IsConnected())
+		{
+			return MakeFulfilledPromise<UE::Online::TOnlineResult<T>>(
+			           UE::Online::FOnlineError{
+			               UE::Online::Errors::ErrorCode::Common::NoConnection})
+			    .GetFuture();
+		}
+
+		auto Promise = MakeUnique<TRequestPromise<T>>();
+		auto Future = Promise->Promise->GetFuture();
+		const auto RequestId = ++LastRequestId;
+		RequestPromises.Add(RequestId, MoveTemp(Promise));
+		Send(RequestId, FAttoC2SProtocol{TInPlaceType<T>(), Forward<ArgTypes>(Args)...});
+		return Future;
+	}
+
+	TFuture<UE::Online::TOnlineResult<FAttoFindSessionsRequest>> FindSessionsAsync(const FOnlineSessionSearch& Search);
 };

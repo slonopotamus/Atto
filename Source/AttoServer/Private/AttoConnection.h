@@ -25,30 +25,30 @@ class FAttoConnection final : public FNoncopyable
 
 	void Send(const void* Data, size_t Size);
 
-	void Send(FAttoS2CProtocol&& Message);
+	void Send(int64 RequestId, FAttoS2CProtocol&& Message);
 
 	template<
 	    typename V,
 	    typename... ArgTypes
 	        UE_REQUIRES(std::is_constructible_v<V, ArgTypes...>)>
-	void Send(ArgTypes&&... Args)
+	void Send(int64 RequestId, ArgTypes&&... Args)
 	{
-		Send(FAttoS2CProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
+		Send(RequestId, FAttoS2CProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
 	}
 
-	void operator()(const FAttoLoginRequest& Message);
+	FAttoLoginRequest::Result operator()(const FAttoLoginRequest& Message);
 
-	void operator()(const FAttoLogoutRequest& Message);
+	FAttoLogoutRequest::Result operator()(const FAttoLogoutRequest& Message);
 
-	void operator()(const FAttoCreateSessionRequest& Message);
+	FAttoCreateSessionRequest::Result operator()(const FAttoCreateSessionRequest& Message);
 
-	void operator()(const FAttoUpdateSessionRequest& Message);
+	FAttoUpdateSessionRequest::Result operator()(const FAttoUpdateSessionRequest& Message);
 
-	void operator()(const FAttoDestroySessionRequest& Message);
+	FAttoDestroySessionRequest::Result operator()(const FAttoDestroySessionRequest& Message);
 
-	void operator()(const FAttoFindSessionsRequest& Message);
+	FAttoFindSessionsRequest::Result operator()(const FAttoFindSessionsRequest& Message);
 
-	void operator()(const FAttoQueryServerUtcTimeRequest& Message);
+	FAttoQueryServerUtcTimeRequest::Result operator()(const FAttoQueryServerUtcTimeRequest& Message);
 
 public:
 	explicit FAttoConnection(FAttoServerInstance& Server, lws* LwsConnection)

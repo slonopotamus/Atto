@@ -133,7 +133,7 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 			Session->SessionState = EOnlineSessionState::Pending;
 
 			// TODO: Wait until call completes?
-			Subsystem.AttoClient->CreateSessionAsync(FAttoSessionInfo{
+			Subsystem.AttoClient->Send<FAttoCreateSessionRequest>(FAttoSessionInfo{
 			    .SessionId = SessionId->Value,
 			    .HostAddress = HostAddress->GetRawIp(),
 			    .Port = HostAddress->GetPort(),
@@ -219,7 +219,7 @@ bool FOnlineSessionAtto::DestroySession(const FName SessionName, const FOnDestro
 	if (bSuccess)
 	{
 		// TODO: Wait until call completes?
-		Subsystem.AttoClient->DestroySessionAsync();
+		Subsystem.AttoClient->Send<FAttoDestroySessionRequest>();
 	}
 	else
 	{
@@ -244,7 +244,7 @@ bool FOnlineSessionAtto::UpdateSession(const FName SessionName, FOnlineSessionSe
 		{
 			if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(Session->SessionInfo); ensure(SessionInfo))
 			{
-				Subsystem.AttoClient->UpdateSessionAsync(SessionInfo->SessionId->Value, FAttoSessionUpdatableInfo{*Session});
+				Subsystem.AttoClient->Send<FAttoUpdateSessionRequest>(SessionInfo->SessionId->Value, FAttoSessionUpdatableInfo{*Session});
 			}
 		}
 
@@ -307,56 +307,59 @@ bool FOnlineSessionAtto::FindSessions(const FUniqueNetId& SearchingPlayerId, con
 
 	CurrentSessionSearch = {
 	    .SearchSettings = SearchSettings,
-	    // TODO: Also subscribe to disconnect?
-	    .OnFindSessionsResponseHandle = Subsystem.AttoClient->OnFindSessionsResponse.AddRaw(this, &ThisClass::OnFindSessionsResponse),
 	};
 
-	Subsystem.AttoClient->FindSessionsAsync(*SearchSettings);
+	Subsystem.AttoClient->FindSessionsAsync(*SearchSettings)
+	    .Next([=, this](auto&& Result) {
+		    if (!Result.IsOk())
+		    {
+			    // TODO: Log error?
+			    CurrentSessionSearch.Reset();
+			    TriggerOnFindSessionsCompleteDelegates(false);
+			    return;
+		    }
+
+		    const auto& Message = Result.GetOkValue();
+		    if (const auto* Search = CurrentSessionSearch.GetPtrOrNull())
+		    {
+			    if (const auto& CurrentSearchId = Search->SearchSettings->PlatformHash; CurrentSearchId != Message.RequestId)
+			    {
+				    UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring game search response %d because current one is %d"), Message.RequestId, CurrentSearchId);
+				    return;
+			    }
+
+			    const auto BuildUniqueId = GetBuildUniqueId();
+
+			    for (const auto& Session : Result.GetOkValue().Sessions)
+			    {
+				    if (Session.Info.BuildUniqueId != BuildUniqueId)
+				    {
+					    continue;
+				    }
+
+				    const auto SessionAddress = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
+				    SessionAddress->SetRawIp(Session.Info.HostAddress);
+				    SessionAddress->SetPort(Session.Info.Port);
+
+				    // TODO: Use separate types for user ids and session ids?
+				    const auto SessionId = FUniqueNetIdAtto::Create(Session.Info.SessionId);
+
+				    auto& ResultSession = Search->SearchSettings->SearchResults.Emplace_GetRef();
+				    ResultSession.Session.OwningUserId = FUniqueNetIdAtto::Create(Session.OwningUserId);
+				    ResultSession.Session.SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, SessionAddress);
+				    ResultSession.Session.SessionSettings.BuildUniqueId = Session.Info.BuildUniqueId;
+				    Session.Info.UpdatableInfo.CopyTo(ResultSession.Session, nullptr);
+				    // TODO: Fill other fields
+			    }
+
+			    Search->SearchSettings->SortSearchResults();
+
+			    CurrentSessionSearch.Reset();
+			    TriggerOnFindSessionsCompleteDelegates(true);
+		    }
+	    });
+
 	return true;
-}
-
-void FOnlineSessionAtto::OnFindSessionsResponse(const FAttoFindSessionsResponse& Message)
-{
-	if (const auto* Search = CurrentSessionSearch.GetPtrOrNull())
-	{
-		if (const auto& CurrentSearchId = Search->SearchSettings->PlatformHash; CurrentSearchId != Message.RequestId)
-		{
-			UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring game search response %d because current one is %d"), Message.RequestId, CurrentSearchId);
-			return;
-		}
-
-		Subsystem.AttoClient->OnFindSessionsResponse.Remove(Search->OnFindSessionsResponseHandle);
-
-		const auto BuildUniqueId = GetBuildUniqueId();
-
-		for (const auto& Session : Message.Sessions)
-		{
-			if (Session.Info.BuildUniqueId != BuildUniqueId)
-			{
-				continue;
-			}
-
-			const auto SessionAddress = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
-			SessionAddress->SetRawIp(Session.Info.HostAddress);
-			SessionAddress->SetPort(Session.Info.Port);
-
-			// TODO: Use separate types for user ids and session ids?
-			const auto SessionId = FUniqueNetIdAtto::Create(Session.Info.SessionId);
-
-			auto& ResultSession = Search->SearchSettings->SearchResults.Emplace_GetRef();
-			ResultSession.Session.OwningUserId = FUniqueNetIdAtto::Create(Session.OwningUserId);
-			ResultSession.Session.SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, SessionAddress);
-			ResultSession.Session.SessionSettings.BuildUniqueId = Session.Info.BuildUniqueId;
-			Session.Info.UpdatableInfo.CopyTo(ResultSession.Session, nullptr);
-			// TODO: Fill other fields
-		}
-
-		Search->SearchSettings->SortSearchResults();
-
-		CurrentSessionSearch.Reset();
-	}
-
-	TriggerOnFindSessionsCompleteDelegates(true);
 }
 
 TSharedRef<FInternetAddr> FOnlineSessionAtto::DetermineSessionPublicAddress()
@@ -412,9 +415,8 @@ bool FOnlineSessionAtto::CancelFindSessions()
 {
 	bool bSuccess = false;
 
-	if (const auto* Search = CurrentSessionSearch.GetPtrOrNull())
+	if (CurrentSessionSearch.GetPtrOrNull())
 	{
-		Subsystem.AttoClient->OnFindSessionsResponse.Remove(Search->OnFindSessionsResponseHandle);
 		CurrentSessionSearch.Reset();
 		bSuccess = true;
 	}

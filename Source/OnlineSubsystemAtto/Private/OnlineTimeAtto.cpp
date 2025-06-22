@@ -2,19 +2,21 @@
 #include "AttoClient.h"
 #include "OnlineSubsystemAtto.h"
 
-FOnlineTimeAtto::FOnlineTimeAtto(FOnlineSubsystemAtto& Subsystem)
-    : Subsystem(Subsystem)
-{
-	Subsystem.AttoClient->OnServerUtcTime.AddLambda([&](const FDateTime& ServerUtcTime) {
-		LastServerUtcTime = ServerUtcTime;
-		TriggerOnQueryServerUtcTimeCompleteDelegates(true, ServerUtcTime.ToIso8601(), TEXT(""));
-	});
-}
-
 bool FOnlineTimeAtto::QueryServerUtcTime()
 {
-	// TODO: Subscribe to disconnect?
-	Subsystem.AttoClient->QueryServerUtcTimeAsync();
+	Subsystem.AttoClient->Send<FAttoQueryServerUtcTimeRequest>()
+	    .Next([=, this](auto&& Result) {
+		    if (Result.IsError())
+		    {
+			    // TODO: Log error?
+			    TriggerOnQueryServerUtcTimeCompleteDelegates(false, GetLastServerUtcTime(), TEXT(""));
+			    return;
+		    }
+
+		    LastServerUtcTime = Result.GetOkValue().ServerTime;
+		    TriggerOnQueryServerUtcTimeCompleteDelegates(true, GetLastServerUtcTime(), TEXT(""));
+	    });
+
 	return true;
 }
 

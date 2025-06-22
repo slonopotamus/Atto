@@ -27,49 +27,41 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 		return false;
 	}
 
-	TSharedPtr<FDelegateHandle> OnConnectedDelegateHandle = MakeShared<FDelegateHandle>();
-	auto OnConnected = [=, this] {
-		Subsystem.AttoClient->OnConnected.Remove(*OnConnectedDelegateHandle);
+	Subsystem.AttoClient
+	    ->ConnectAsync()
+	    .Next([=, this](auto&& ConnectResult) {
+		    if (!ConnectResult)
+		    {
+			    TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, TEXT("Connect failed"));
+			    return;
+		    }
 
-		TSharedPtr<FDelegateHandle> OnLoginDelegateHandle = MakeShared<FDelegateHandle>();
+		    Subsystem.AttoClient->Send<FAttoLoginRequest>(AccountCredentials.Id, AccountCredentials.Token)
+		        .Next([=, this](auto&& LoginResult) {
+			        if (!LoginResult.IsOk())
+			        {
+				        TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, TEXT(""));
+				        return;
+			        }
 
-		// TODO: Can we avoid nested lambdas?
-		auto OnLogin = [=, this](const FAttoLoginResponse& LoginResponse) {
-			Subsystem.AttoClient->OnLoginResponse.Remove(*OnLoginDelegateHandle);
+			        // TODO: Rewrite this using Visit
+			        if (const auto* UserIdPtr = LoginResult.GetOkValue().template TryGet<uint64>())
+			        {
+				        const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
+				        Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
+				        LocalUsers.Add(LocalUserNum, UserId);
 
-			// TODO: Rewrite this using Visit
-			if (const auto* UserIdPtr = LoginResponse.TryGet<uint64>())
-			{
-				const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
-				Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
-				LocalUsers.Add(LocalUserNum, UserId);
-
-				UE_LOG_ONLINE(Log, TEXT("Successfully logged into Atto server, userId=%s"), *UserId->ToDebugString());
-				TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
-			}
-			else
-			{
-				const auto& Error = LoginResponse.Get<FString>();
-				UE_LOG_ONLINE(Warning, TEXT("Failed to login to Atto server: %s"), *Error);
-				TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
-			}
-		};
-
-		// TODO: Also subscribe to OnConnectionError?
-		OnLoginDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnLoginResponse.AddLambda(OnLogin));
-		// TODO: Is AccountCredentials properly captured (by value)?
-		Subsystem.AttoClient->LoginAsync(AccountCredentials.Id, AccountCredentials.Token);
-	};
-
-	if (Subsystem.AttoClient->IsConnected())
-	{
-		OnConnected();
-	}
-	else
-	{
-		OnConnectedDelegateHandle = MakeShared<FDelegateHandle>(Subsystem.AttoClient->OnConnected.AddLambda(OnConnected));
-		Subsystem.AttoClient->ConnectAsync();
-	}
+				        UE_LOG_ONLINE(Log, TEXT("Successfully logged into Atto server, userId=%s"), *UserId->ToDebugString());
+				        TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
+			        }
+			        else
+			        {
+				        const auto& Error = LoginResult.GetOkValue().template Get<FString>();
+				        UE_LOG_ONLINE(Warning, TEXT("Failed to login to Atto server: %s"), *Error);
+				        TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
+			        }
+		        });
+	    });
 
 	return true;
 }
@@ -84,13 +76,20 @@ bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 		return false;
 	}
 
-	Subsystem.AttoClient->LogoutAsync();
-
-	Accounts.Remove(*UserId);
-	LocalUsers.Remove(LocalUserNum);
-
 	// TODO: Wait until logout actually completes? But why?
-	TriggerOnLogoutCompleteDelegates(LocalUserNum, true);
+	Subsystem.AttoClient->Send<FAttoLogoutRequest>()
+	    .Next([=, this](auto&& LogoutResult) {
+		    if (!LogoutResult.IsOk())
+		    {
+			    TriggerOnLogoutCompleteDelegates(LocalUserNum, false);
+			    return;
+		    }
+
+		    Accounts.Remove(*UserId);
+		    LocalUsers.Remove(LocalUserNum);
+
+		    TriggerOnLogoutCompleteDelegates(LocalUserNum, true);
+	    });
 
 	return true;
 }

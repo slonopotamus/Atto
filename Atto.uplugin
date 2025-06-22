@@ -32,6 +32,10 @@
 	],
 	"Plugins": [
 		{
+			"Name": "OnlineServices",
+			"Enabled": true
+		},
+		{
 			"Name": "OnlineSubsystemUtils",
 			"Enabled": true
 		}
