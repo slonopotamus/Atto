@@ -10,9 +10,9 @@ THIRD_PARTY_INCLUDES_END
 
 FAttoConnection::~FAttoConnection()
 {
-	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
+	for (const auto& UserId : Users)
 	{
-		Server.Sessions.Remove(*UserIdPtr);
+		Server.Sessions.Remove(UserId);
 	}
 }
 
@@ -109,7 +109,7 @@ FAttoLoginRequest::Result FAttoConnection::operator()(const FAttoLoginRequest& M
 
 	const auto Guid = FGuid::NewGuid();
 	const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));
-	UserId = Id;
+	Users.Add(Id);
 
 	// TODO: TInPlaceType is weird
 	return FAttoLoginRequest::Result{TInPlaceType<uint64>(), Id};
@@ -117,64 +117,54 @@ FAttoLoginRequest::Result FAttoConnection::operator()(const FAttoLoginRequest& M
 
 FAttoLogoutRequest::Result FAttoConnection::operator()(const FAttoLogoutRequest& Message)
 {
-	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
-	{
-		Server.Sessions.Remove(*UserIdPtr);
-	}
-
-	UserId.Reset();
-	return {true};
+	const bool bSuccess = Server.Sessions.Remove(Message.UserId) > 0;
+	return {bSuccess};
 }
 
 FAttoCreateSessionRequest::Result FAttoConnection::operator()(const FAttoCreateSessionRequest& Message)
 {
-	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
+	if (!Users.Contains(Message.SessionInfo.OwningUserId))
 	{
-		// TODO: Check if entry already exists?
-		// TODO: Should we allow to create multiple sessions simultaneously?
-		Server.Sessions.Add(*UserIdPtr, Message.SessionInfo);
-		return {true};
+		return {false};
 	}
 
-	// TODO: Disconnect them?
-
-	return {false};
+	// TODO: Check if entry already exists? For any of users? But what if they login later?
+	Server.Sessions.Add(Message.SessionInfo.OwningUserId, Message.SessionInfo.SessionInfo);
+	return {true};
 }
 
 FAttoUpdateSessionRequest::Result FAttoConnection::operator()(const FAttoUpdateSessionRequest& Message)
 {
-	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
+	if (!Users.Contains(Message.OwningUserId))
 	{
-		if (auto* Session = Server.Sessions.Find(*UserIdPtr))
-		{
-			Session->UpdatableInfo = Message.SessionInfo;
-			return {true};
-		}
-	}
-	else
-	{
-		// TODO: Disconnect them?
+		return {false};
 	}
 
-	return {false};
+	auto* Session = Server.Sessions.Find(Message.OwningUserId);
+	if (!Session)
+	{
+		return {false};
+	}
+
+	Session->UpdatableInfo = Message.SessionInfo;
+	return {true};
 }
 
 FAttoDestroySessionRequest::Result FAttoConnection::operator()(const FAttoDestroySessionRequest& Message)
 {
-	if (const auto* UserIdPtr = UserId.GetPtrOrNull())
+	if (!Users.Contains(Message.OwningUserId))
 	{
-		return {Server.Sessions.Remove(*UserIdPtr) > 0};
+		return {false};
 	}
 
-	// TODO: Disconnect them?
-	return {false};
+	return {Server.Sessions.Remove(Message.OwningUserId) > 0};
 }
 
 FAttoFindSessionsRequest::Result FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 {
 	TArray<FAttoSessionInfoEx> Sessions;
 
-	if (UserId.IsSet())
+	if (!Users.IsEmpty())
 	{
 		const auto MaxResults = FMath::Min(Message.MaxResults, Server.MaxFindSessionsResults);
 
@@ -197,10 +187,6 @@ FAttoFindSessionsRequest::Result FAttoConnection::operator()(const FAttoFindSess
 
 			Sessions.Emplace(OwningUserId, Session);
 		}
-	}
-	else
-	{
-		// TODO: Disconnect them?
 	}
 
 	return {Message.RequestId, MoveTemp(Sessions)};

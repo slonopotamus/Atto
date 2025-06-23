@@ -21,11 +21,11 @@ struct ATTOCOMMON_API FAttoLoginRequest
 
 struct ATTOCOMMON_API FAttoLogoutRequest
 {
-	// Workaround to fix clang-format 19 messing up everything
-	bool bDummy = false;
+	uint64 UserId = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoLogoutRequest& Message)
 	{
+		Ar << Message.UserId;
 		return Ar;
 	}
 
@@ -157,19 +157,19 @@ struct ATTOCOMMON_API FAttoSessionInfo
 struct ATTOCOMMON_API FAttoSessionInfoEx
 {
 	uint64 OwningUserId = 0;
-	FAttoSessionInfo Info;
+	FAttoSessionInfo SessionInfo;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoSessionInfoEx& Message)
 	{
 		Ar << Message.OwningUserId;
-		Ar << Message.Info;
+		Ar << Message.SessionInfo;
 		return Ar;
 	}
 };
 
 struct ATTOCOMMON_API FAttoCreateSessionRequest
 {
-	FAttoSessionInfo SessionInfo;
+	FAttoSessionInfoEx SessionInfo;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoCreateSessionRequest& Message)
 	{
@@ -191,12 +191,14 @@ struct ATTOCOMMON_API FAttoCreateSessionRequest
 
 struct ATTOCOMMON_API FAttoUpdateSessionRequest
 {
+	uint64 OwningUserId = 0;
 	uint64 SessionId = 0;
 
 	FAttoSessionUpdatableInfo SessionInfo;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoUpdateSessionRequest& Message)
 	{
+		Ar << Message.OwningUserId;
 		Ar << Message.SessionInfo;
 		return Ar;
 	}
@@ -215,11 +217,11 @@ struct ATTOCOMMON_API FAttoUpdateSessionRequest
 
 struct ATTOCOMMON_API FAttoDestroySessionRequest
 {
-	// Workaround to fix clang-format 19 messing up everything
-	bool bDummy = false;
+	uint64 OwningUserId = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoDestroySessionRequest& Message)
 	{
+		Ar << Message.OwningUserId;
 		return Ar;
 	}
 

@@ -76,17 +76,16 @@ bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 		return false;
 	}
 
-	// TODO: Wait until logout actually completes? But why?
-	Subsystem.AttoClient->Send<FAttoLogoutRequest>()
-	    .Next([=, this](auto&& LogoutResult) {
-		    if (!LogoutResult.IsOk())
+	Accounts.Remove(*UserId);
+	LocalUsers.Remove(LocalUserNum);
+
+	Subsystem.AttoClient->Send<FAttoLogoutRequest>(UserId->Get().Value)
+	    .Next([=, this](auto&& Response) {
+		    if (!Response.IsOk() || !Response.GetOkValue().bSuccess)
 		    {
 			    TriggerOnLogoutCompleteDelegates(LocalUserNum, false);
 			    return;
 		    }
-
-		    Accounts.Remove(*UserId);
-		    LocalUsers.Remove(LocalUserNum);
 
 		    TriggerOnLogoutCompleteDelegates(LocalUserNum, true);
 	    });
