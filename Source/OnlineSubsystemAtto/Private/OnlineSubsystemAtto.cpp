@@ -72,13 +72,13 @@ bool FOnlineSubsystemAtto::Shutdown()
 	UE_LOG_ONLINE(VeryVerbose, TEXT("FOnlineSubsystemAtto::Shutdown()"));
 
 	OnlineAsyncTaskThread.Reset();
+	AttoClient.Reset();
 
 	DestructAttoInterface(IdentityInterface);
 	DestructAttoInterface(SessionInterface);
 	DestructAttoInterface(TimeInterface);
 
 	TaskManager.Reset();
-	AttoClient.Reset();
 
 	Super::Shutdown();
 
