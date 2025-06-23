@@ -109,45 +109,48 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 	{
 		UE_LOG_ONLINE_SESSION(Warning, TEXT("Cannot create session '%s': session already exists"), *SessionName.ToString());
 	}
+	else if (const auto OwningUserId = StaticCastSharedPtr<const FUniqueNetIdAtto>(Subsystem.IdentityInterface->GetUniquePlayerId(HostingPlayerNum)))
+	{
+		const FGuid Guid = FGuid::NewGuid();
+		// TODO: Who is responsible for generating session ids?
+		const auto SessionId = FUniqueNetIdAtto::Create(CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid)));
+
+		// TODO: Maybe this should better be passed via session settings instead of command-line args?
+		const auto& HostAddress = DetermineSessionPublicAddress();
+		HostAddress->SetPort(DetermineSessionPublicPort());
+
+		const auto Session = AddNamedSession(SessionName, NewSessionSettings);
+		Session->bHosting = true;
+		Session->HostingPlayerNum = HostingPlayerNum;
+		Session->NumOpenPrivateConnections = NewSessionSettings.NumPrivateConnections;
+		Session->NumOpenPublicConnections = NewSessionSettings.NumPublicConnections;
+		Session->OwningUserId = OwningUserId;
+		Session->OwningUserName = Subsystem.IdentityInterface->GetPlayerNickname(HostingPlayerNum);
+		Session->SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, HostAddress);
+		Session->SessionSettings = NewSessionSettings;
+		Session->SessionState = EOnlineSessionState::Pending;
+
+		Subsystem.AttoClient
+		    ->Send<FAttoCreateSessionRequest>(FAttoSessionInfoEx{
+		        .OwningUserId = OwningUserId->Value,
+		        .SessionInfo = FAttoSessionInfo{
+		            .SessionId = SessionId->Value,
+		            .HostAddress = HostAddress->GetRawIp(),
+		            .Port = HostAddress->GetPort(),
+		            .BuildUniqueId = Session->SessionSettings.BuildUniqueId,
+		            .UpdatableInfo = FAttoSessionUpdatableInfo{*Session},
+		            .bIsDedicated = Session->SessionSettings.bIsDedicated,
+		            .bAntiCheatProtected = Session->SessionSettings.bAntiCheatProtected,
+		        }})
+		    .Next([=, this](auto&& Response) {
+			    TriggerOnCreateSessionCompleteDelegates(SessionName, Response.IsOk() && Response.GetOkValue().bSuccess);
+		    });
+
+		return true;
+	}
 	else
 	{
-		if (const auto OwningUserId = StaticCastSharedPtr<const FUniqueNetIdAtto>(Subsystem.IdentityInterface->GetUniquePlayerId(HostingPlayerNum)))
-		{
-			const FGuid Guid = FGuid::NewGuid();
-			// TODO: Who is responsible for generating session ids?
-			const auto SessionId = FUniqueNetIdAtto::Create(CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid)));
-
-			// TODO: Maybe this should better be passed via session settings instead of command-line args?
-			const auto& HostAddress = DetermineSessionPublicAddress();
-			HostAddress->SetPort(DetermineSessionPublicPort());
-
-			const auto Session = AddNamedSession(SessionName, NewSessionSettings);
-			Session->bHosting = true;
-			Session->HostingPlayerNum = HostingPlayerNum;
-			Session->NumOpenPrivateConnections = NewSessionSettings.NumPrivateConnections;
-			Session->NumOpenPublicConnections = NewSessionSettings.NumPublicConnections;
-			Session->OwningUserId = OwningUserId;
-			Session->OwningUserName = Subsystem.IdentityInterface->GetPlayerNickname(HostingPlayerNum);
-			Session->SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, HostAddress);
-			Session->SessionSettings = NewSessionSettings;
-			Session->SessionState = EOnlineSessionState::Pending;
-
-			// TODO: Wait until call completes?
-			Subsystem.AttoClient->Send<FAttoCreateSessionRequest>(FAttoSessionInfo{
-			    .SessionId = SessionId->Value,
-			    .HostAddress = HostAddress->GetRawIp(),
-			    .Port = HostAddress->GetPort(),
-			    .BuildUniqueId = Session->SessionSettings.BuildUniqueId,
-			    .UpdatableInfo = FAttoSessionUpdatableInfo{*Session},
-			    .bIsDedicated = Session->SessionSettings.bIsDedicated,
-			    .bAntiCheatProtected = Session->SessionSettings.bAntiCheatProtected,
-			});
-
-			TriggerOnCreateSessionCompleteDelegates(SessionName, true);
-			return true;
-		}
-
-		UE_LOG_ONLINE_SESSION(Warning, TEXT("Cannot create session '%s': o logged in user found for LocalUserNum=%d"), *SessionName.ToString(), HostingPlayerNum);
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Cannot create session '%s': no logged in user found for LocalUserNum=%d"), *SessionName.ToString(), HostingPlayerNum);
 	}
 
 	TriggerOnCreateSessionCompleteDelegates(SessionName, false);
@@ -169,6 +172,7 @@ bool FOnlineSessionAtto::StartSession(const FName SessionName)
 		if (Session->SessionState == EOnlineSessionState::Pending || Session->SessionState == EOnlineSessionState::Ended)
 		{
 			Session->SessionState = EOnlineSessionState::InProgress;
+			// TODO: Wait until async call completes
 			UpdateSession(SessionName, Session->SessionSettings);
 			bSuccess = true;
 		}
@@ -214,27 +218,32 @@ bool FOnlineSessionAtto::EndSession(const FName SessionName)
 
 bool FOnlineSessionAtto::DestroySession(const FName SessionName, const FOnDestroySessionCompleteDelegate& CompletionDelegate)
 {
-	const bool bSuccess = Sessions.Remove(SessionName) > 0;
+	const auto CallDelegates = [=, this](const bool bSuccess) {
+		CompletionDelegate.ExecuteIfBound(SessionName, bSuccess);
+		TriggerOnDestroySessionCompleteDelegates(SessionName, bSuccess);
+	};
 
-	if (bSuccess)
+	if (const auto* Session = Sessions.Find(SessionName))
 	{
-		// TODO: Wait until call completes?
-		Subsystem.AttoClient->Send<FAttoDestroySessionRequest>();
-	}
-	else
-	{
-		UE_LOG_ONLINE_SESSION(Warning, TEXT("Can't destroy a null online session (%s)"), *SessionName.ToString());
+		Subsystem.AttoClient
+		    ->Send<FAttoDestroySessionRequest>(StaticCastSharedPtr<const FUniqueNetIdAtto>(Session->OwningUserId)->Value)
+		    .Next([=, this](auto&& Response) {
+			    const bool bSuccess = Response.IsOk() && Response.GetOkValue().bSuccess;
+			    CallDelegates(bSuccess);
+		    });
+
+		Sessions.Remove(SessionName);
+		return true;
 	}
 
-	CompletionDelegate.ExecuteIfBound(SessionName, bSuccess);
-	TriggerOnDestroySessionCompleteDelegates(SessionName, bSuccess);
-	return bSuccess;
+	UE_LOG_ONLINE_SESSION(Warning, TEXT("Can't destroy a null online session (%s)"), *SessionName.ToString());
+
+	CallDelegates(false);
+	return false;
 }
 
 bool FOnlineSessionAtto::UpdateSession(const FName SessionName, FOnlineSessionSettings& UpdatedSessionSettings, const bool bShouldRefreshOnlineData)
 {
-	bool bSuccess = false;
-
 	if (auto* Session = GetNamedSession(SessionName))
 	{
 		// TODO: We're updating here what's not actually updatable via FAttoSessionUpdatableInfo...
@@ -244,19 +253,18 @@ bool FOnlineSessionAtto::UpdateSession(const FName SessionName, FOnlineSessionSe
 		{
 			if (const auto& SessionInfo = StaticCastSharedPtr<FOnlineSessionInfoAtto>(Session->SessionInfo); ensure(SessionInfo))
 			{
-				Subsystem.AttoClient->Send<FAttoUpdateSessionRequest>(SessionInfo->SessionId->Value, FAttoSessionUpdatableInfo{*Session});
+				Subsystem.AttoClient
+				    ->Send<FAttoUpdateSessionRequest>(StaticCastSharedPtr<const FUniqueNetIdAtto>(Session->OwningUserId)->Value, SessionInfo->SessionId->Value, FAttoSessionUpdatableInfo{*Session})
+				    .Next([=, this](auto&& Response) {
+					    TriggerOnUpdateSessionCompleteDelegates(SessionName, Response.IsOk() && Response.GetOkValue().bSuccess);
+				    });
+				return true;
 			}
 		}
-
-		bSuccess = true;
-	}
-	else
-	{
-		// TODO: Log warning?
 	}
 
-	TriggerOnUpdateSessionCompleteDelegates(SessionName, bSuccess);
-	return bSuccess;
+	TriggerOnUpdateSessionCompleteDelegates(SessionName, false);
+	return false;
 }
 
 bool FOnlineSessionAtto::IsPlayerInSession(const FName SessionName, const FUniqueNetId& UniqueId)
@@ -332,23 +340,23 @@ bool FOnlineSessionAtto::FindSessions(const FUniqueNetId& SearchingPlayerId, con
 
 			    for (const auto& Session : Result.GetOkValue().Sessions)
 			    {
-				    if (Session.Info.BuildUniqueId != BuildUniqueId)
+				    if (Session.SessionInfo.BuildUniqueId != BuildUniqueId)
 				    {
 					    continue;
 				    }
 
 				    const auto SessionAddress = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
-				    SessionAddress->SetRawIp(Session.Info.HostAddress);
-				    SessionAddress->SetPort(Session.Info.Port);
+				    SessionAddress->SetRawIp(Session.SessionInfo.HostAddress);
+				    SessionAddress->SetPort(Session.SessionInfo.Port);
 
 				    // TODO: Use separate types for user ids and session ids?
-				    const auto SessionId = FUniqueNetIdAtto::Create(Session.Info.SessionId);
+				    const auto SessionId = FUniqueNetIdAtto::Create(Session.SessionInfo.SessionId);
 
 				    auto& ResultSession = Search->SearchSettings->SearchResults.Emplace_GetRef();
 				    ResultSession.Session.OwningUserId = FUniqueNetIdAtto::Create(Session.OwningUserId);
 				    ResultSession.Session.SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, SessionAddress);
-				    ResultSession.Session.SessionSettings.BuildUniqueId = Session.Info.BuildUniqueId;
-				    Session.Info.UpdatableInfo.CopyTo(ResultSession.Session, nullptr);
+				    ResultSession.Session.SessionSettings.BuildUniqueId = Session.SessionInfo.BuildUniqueId;
+				    Session.SessionInfo.UpdatableInfo.CopyTo(ResultSession.Session, nullptr);
 				    // TODO: Fill other fields
 			    }
 
