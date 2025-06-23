@@ -9,6 +9,7 @@ struct lws;
 struct FAttoMessage final
 {
 	TArray<unsigned char> Payload;
+	int32 BytesWritten = 0;
 };
 
 class FAttoConnection final : public FNoncopyable
