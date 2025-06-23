@@ -32,6 +32,7 @@ FAttoClient::FAttoClient(const FString& Url)
 		{
 			Promise->HandleDisconnect();
 		}
+
 		RequestPromises.Empty();
 		OnDisconnected.Broadcast(Reason, bWasClean);
 	});
@@ -49,7 +50,7 @@ FAttoClient::FAttoClient(const FString& Url)
 		FAttoS2CProtocol Message;
 		Ar << Message;
 
-		if (ensure(!Ar.IsError()) && ensure(Ar.GetBitsLeft() == 0))
+		if (ensure(!Ar.IsError()))
 		{
 			if (TUniquePtr<IRequestPromise> RequestPromise; ensure(RequestPromises.RemoveAndCopyValue(RequestId, RequestPromise)))
 			{
@@ -61,6 +62,8 @@ FAttoClient::FAttoClient(const FString& Url)
 
 FAttoClient::~FAttoClient()
 {
+	WebSocket->Close();
+
 	for (const auto& Promise : ConnectPromises)
 	{
 		Promise->SetValue(false);
@@ -160,5 +163,5 @@ TFuture<UE::Online::TOnlineResult<FAttoFindSessionsRequest>> FAttoClient::FindSe
 		}
 	}
 
-	return Send<FAttoFindSessionsRequest>(MoveTemp(Params), Search.MaxSearchResults);
+	return Send<FAttoFindSessionsRequest>(MoveTemp(Params), Search.PlatformHash, Search.MaxSearchResults);
 }

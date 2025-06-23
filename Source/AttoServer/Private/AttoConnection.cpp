@@ -36,7 +36,7 @@ void FAttoConnection::ReceiveInternal(const void* Data, const size_t Size)
 	FAttoC2SProtocol Message;
 	Ar << Message;
 
-	if (ensure(!Ar.IsError()) && ensure(Ar.GetBitsLeft() == 0))
+	if (ensure(!Ar.IsError()))
 	{
 		Visit(
 		    [&]<typename RequestType>(const RequestType& Variant) {
