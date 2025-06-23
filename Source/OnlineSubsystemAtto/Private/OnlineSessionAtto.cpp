@@ -199,6 +199,7 @@ bool FOnlineSessionAtto::EndSession(const FName SessionName)
 		if (Session->SessionState == EOnlineSessionState::InProgress)
 		{
 			Session->SessionState = EOnlineSessionState::Ended;
+			// TODO: Wait until async call completes
 			UpdateSession(SessionName, Session->SessionSettings);
 			bSuccess = true;
 		}
