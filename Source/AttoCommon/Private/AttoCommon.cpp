@@ -30,7 +30,7 @@ namespace Atto
 			return Url;
 		}
 
-		if (GIsEditor)
+		if (GIsEditor && !IsRunningCommandlet())
 		{
 			const auto BindAddress = GetBindAddress(Stream);
 			return FString::Printf(TEXT("ws://%s:%u"), *BindAddress.Get(TEXT("localhost")), GetPort(Stream));
