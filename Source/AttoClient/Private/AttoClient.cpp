@@ -62,6 +62,10 @@ FAttoClient::FAttoClient(const FString& Url)
 
 FAttoClient::~FAttoClient()
 {
+	WebSocket->OnConnected().Clear();
+	WebSocket->OnConnectionError().Clear();
+	WebSocket->OnClosed().Clear();
+	WebSocket->OnBinaryMessage().Clear();
 	WebSocket->Close();
 
 	for (const auto& Promise : ConnectPromises)
