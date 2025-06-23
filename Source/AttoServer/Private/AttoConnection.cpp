@@ -89,10 +89,29 @@ void FAttoConnection::SendFromQueueInternal()
 {
 	if (auto* Message = SendQueue.Peek(); ensure(Message))
 	{
-		const auto Size = Message->Payload.Num() - LWS_PRE;
-		// TODO: Implement partial write
-		ensure(lws_write(LwsConnection, Message->Payload.GetData() + LWS_PRE, Size, LWS_WRITE_BINARY) == Size);
-		SendQueue.Pop();
+		const auto PayloadSize = Message->Payload.Num() - LWS_PRE;
+		const auto Offset = Message->BytesWritten;
+		const auto Protocol = Message->BytesWritten == 0 ? LWS_WRITE_BINARY : LWS_WRITE_CONTINUATION;
+
+		const auto BytesWritten = lws_write(
+		    LwsConnection,
+		    Message->Payload.GetData() + LWS_PRE + Offset,
+		    PayloadSize - Offset,
+		    Protocol);
+
+		if (BytesWritten < 0)
+		{
+			// TODO: Log error?
+			SendQueue.Pop();
+		}
+		else
+		{
+			Message->BytesWritten += BytesWritten;
+			if (Message->BytesWritten >= PayloadSize)
+			{
+				SendQueue.Pop();
+			}
+		}
 	}
 
 	if (!SendQueue.IsEmpty())
