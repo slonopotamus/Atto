@@ -122,9 +122,15 @@ void FAttoConnection::SendFromQueueInternal()
 
 FAttoLoginRequest::Result FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
-	// TODO: Check credentials
-	(void)Message.Username;
-	(void)Message.Password;
+	if (Message.Username.IsEmpty())
+	{
+		return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Username must not be empty")};
+	}
+
+	if (Message.Username != Message.Password)
+	{
+		return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Wrong password")};
+	}
 
 	const auto Guid = FGuid::NewGuid();
 	const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));

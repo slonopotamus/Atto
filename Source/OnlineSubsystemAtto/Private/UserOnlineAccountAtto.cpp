@@ -27,7 +27,8 @@ bool FUserOnlineAccountAtto::GetUserAttribute(const FString& AttrName, FString& 
 
 FString FUserOnlineAccountAtto::GetAccessToken() const
 {
-	return TEXT("");
+	// TODO: This is just a stub
+	return UserId->ToString();
 }
 
 bool FUserOnlineAccountAtto::GetAuthAttribute(const FString& AttrName, FString& OutAttrValue) const
