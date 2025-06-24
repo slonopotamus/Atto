@@ -136,7 +136,13 @@ FAttoLoginRequest::Result FAttoConnection::operator()(const FAttoLoginRequest& M
 
 FAttoLogoutRequest::Result FAttoConnection::operator()(const FAttoLogoutRequest& Message)
 {
-	const bool bSuccess = Server.Sessions.Remove(Message.UserId) > 0;
+	const bool bSuccess = Users.Remove(Message.UserId) > 0;
+
+	if (bSuccess)
+	{
+		Server.Sessions.Remove(Message.UserId);
+	}
+
 	return {bSuccess};
 }
 
