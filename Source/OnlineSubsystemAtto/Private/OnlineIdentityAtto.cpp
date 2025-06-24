@@ -36,7 +36,8 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 			    return;
 		    }
 
-		    Subsystem.AttoClient->Send<FAttoLoginRequest>(AccountCredentials.Id, AccountCredentials.Token)
+		    Subsystem.AttoClient
+		        ->Send<FAttoLoginRequest>(AccountCredentials.Id, AccountCredentials.Token)
 		        .Next([=, this](auto&& LoginResult) {
 			        if (!LoginResult.IsOk())
 			        {
@@ -68,26 +69,24 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 
 bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 {
-	const auto* UserId = LocalUsers.Find(LocalUserNum);
-	if (!UserId)
+	const auto* UserIdPtr = LocalUsers.Find(LocalUserNum);
+	if (!UserIdPtr)
 	{
 		UE_LOG_ONLINE_IDENTITY(Warning, TEXT("No logged in user found for LocalUserNum=%d"), LocalUserNum);
 		TriggerOnLogoutCompleteDelegates(LocalUserNum, false);
 		return false;
 	}
 
-	Accounts.Remove(*UserId);
-	LocalUsers.Remove(LocalUserNum);
+	const auto UserId = *UserIdPtr;
 
-	Subsystem.AttoClient->Send<FAttoLogoutRequest>(UserId->Get().Value)
+	ensure(Accounts.Remove(UserId));
+	ensure(LocalUsers.Remove(LocalUserNum));
+
+	Subsystem.AttoClient
+	    ->Send<FAttoLogoutRequest>(UserId->Value)
 	    .Next([=, this](auto&& Response) {
-		    if (!Response.IsOk() || !Response.GetOkValue().bSuccess)
-		    {
-			    TriggerOnLogoutCompleteDelegates(LocalUserNum, false);
-			    return;
-		    }
-
-		    TriggerOnLogoutCompleteDelegates(LocalUserNum, true);
+		    const auto bSuccess = Response.IsOk() && Response.GetOkValue().bSuccess;
+		    TriggerOnLogoutCompleteDelegates(LocalUserNum, bSuccess);
 	    });
 
 	return true;
@@ -172,8 +171,7 @@ FString FOnlineIdentityAtto::GetAuthToken(const int32 LocalUserNum) const
 
 void FOnlineIdentityAtto::RevokeAuthToken(const FUniqueNetId& LocalUserId, const FOnRevokeAuthTokenCompleteDelegate& Delegate)
 {
-	static const FOnlineError Error{false};
-	Delegate.ExecuteIfBound(LocalUserId, Error);
+	Delegate.ExecuteIfBound(LocalUserId, FOnlineError{LocalUserId.IsValid()});
 }
 
 void FOnlineIdentityAtto::GetUserPrivilege(const FUniqueNetId& LocalUserId, const EUserPrivileges::Type Privilege, const FOnGetUserPrivilegeCompleteDelegate& Delegate, const EShowPrivilegeResolveUI ShowResolveUI)

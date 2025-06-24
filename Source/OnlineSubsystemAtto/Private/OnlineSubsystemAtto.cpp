@@ -51,7 +51,10 @@ bool FOnlineSubsystemAtto::Init()
 		bool bAutologinAtStartup = true;
 		GConfig->GetBool(TEXT("OnlineSubsystemAtto"), TEXT("bAutoLoginAtStartup"), bAutologinAtStartup, GEngineIni);
 
-		IdentityInterface->AutoLogin(0);
+		if (bAutologinAtStartup)
+		{
+			IdentityInterface->AutoLogin(0);
+		}
 	}
 
 	return true;
