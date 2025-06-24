@@ -126,7 +126,7 @@ struct ATTOCOMMON_API FAttoSessionInfo
 			return false;
 		}
 
-		if (UpdatableInfo.NumOpenPublicConnections < 0)
+		if (UpdatableInfo.NumOpenPublicConnections <= 0)
 		{
 			return false;
 		}
