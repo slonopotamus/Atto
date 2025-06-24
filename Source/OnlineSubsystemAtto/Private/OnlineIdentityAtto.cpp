@@ -24,7 +24,7 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 	if (const auto* UserId = LocalUsers.Find(LocalUserNum))
 	{
 		TriggerOnLoginCompleteDelegates(LocalUserNum, true, **UserId, FString::Printf(TEXT("Local user %d is already logged in"), LocalUserNum));
-		return false;
+		return true;
 	}
 
 	Subsystem.AttoClient
