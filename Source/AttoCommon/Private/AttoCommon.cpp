@@ -4,7 +4,7 @@ namespace Atto
 {
 	const uint32 DefaultPort{27777};
 
-	const char* const Protocol{"atto"};
+	const char* const Protocol{"Atto"};
 
 	uint32 GetPort(const TCHAR* Stream)
 	{

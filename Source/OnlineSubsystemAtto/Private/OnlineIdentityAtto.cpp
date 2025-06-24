@@ -7,10 +7,21 @@
 
 bool FOnlineIdentityAtto::AutoLogin(const int32 LocalUserNum)
 {
-	// TODO: Do not autologin if we are a non-PIE AttoServer, so we do not connect to ourselves
+	if (FOnlineAccountCredentials Credentials; FParse::Value(FCommandLine::Get(), TEXT("AUTH_LOGIN="), Credentials.Id) && FParse::Value(FCommandLine::Get(), TEXT("AUTH_PASSWORD="), Credentials.Token) && FParse::Value(FCommandLine::Get(), TEXT("AUTH_TYPE="), Credentials.Type))
+	{
+		return Login(LocalUserNum, Credentials);
+	}
 
-	// TODO: Fill credentials
-	return Login(LocalUserNum, FOnlineAccountCredentials());
+	bool bRequireLoginCredentials = false;
+	GConfig->GetBool(TEXT("OnlineSubsystemAtto"), TEXT("bRequireLoginCredentials"), bRequireLoginCredentials, GEngineIni);
+
+	if (bRequireLoginCredentials)
+	{
+		return false;
+	}
+
+	// TODO: Do not autologin if we are a non-PIE AttoServer, so we do not connect to ourselves
+	return Login(LocalUserNum, FOnlineAccountCredentials(GetAuthType(), TEXT("user1"), TEXT("user1")));
 }
 
 bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCredentials& AccountCredentials)
@@ -18,6 +29,12 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 	if (LocalUserNum < 0 || LocalUserNum > MAX_LOCAL_PLAYERS)
 	{
 		TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, FString::Printf(TEXT("Invalid LocalUserNum=%d"), LocalUserNum));
+		return false;
+	}
+
+	if (AccountCredentials.Type != GetAuthType())
+	{
+		TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, FString::Printf(TEXT("Invalid account credentials type: %s"), *AccountCredentials.Type));
 		return false;
 	}
 
@@ -166,6 +183,12 @@ FString FOnlineIdentityAtto::GetPlayerNickname(const FUniqueNetId& UserId) const
 
 FString FOnlineIdentityAtto::GetAuthToken(const int32 LocalUserNum) const
 {
+	if (const auto& UserId = GetUniquePlayerId(LocalUserNum))
+	{
+		// TODO: This is just a stub
+		return UserId->ToString();
+	}
+
 	return TEXT("");
 }
 
@@ -187,7 +210,7 @@ FPlatformUserId FOnlineIdentityAtto::GetPlatformUserIdFromUniqueNetId(const FUni
 
 FString FOnlineIdentityAtto::GetAuthType() const
 {
-	return TEXT("");
+	return TEXT("Atto");
 }
 
 int32 FOnlineIdentityAtto::GetLocalUserNumFromUniqueNetId(const FUniqueNetId& UniqueNetId) const
