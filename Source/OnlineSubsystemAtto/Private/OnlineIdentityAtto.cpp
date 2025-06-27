@@ -54,7 +54,7 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 		    }
 
 		    Subsystem.AttoClient
-		        ->Send<FAttoLoginRequest>(AccountCredentials.Id, AccountCredentials.Token)
+		        ->Send<FAttoLoginRequest>(AccountCredentials.Id, AccountCredentials.Token, GetBuildUniqueId())
 		        .Next([=, this](auto&& LoginResult) {
 			        if (!LoginResult.IsOk())
 			        {
