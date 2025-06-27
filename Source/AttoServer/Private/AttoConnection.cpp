@@ -122,6 +122,13 @@ void FAttoConnection::SendFromQueueInternal()
 
 FAttoLoginRequest::Result FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
+	if (Message.BuildUniqueId != GetBuildUniqueId())
+	{
+		return FAttoLoginRequest::Result{
+		    TInPlaceType<FString>(),
+		    FString::Printf(TEXT("Rejecting login [%s]: mismatched build id. Server: %d != Client: %d"), *Message.Username, GetBuildUniqueId(), Message.BuildUniqueId)};
+	}
+
 	if (Message.Username.IsEmpty())
 	{
 		return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Username must not be empty")};
