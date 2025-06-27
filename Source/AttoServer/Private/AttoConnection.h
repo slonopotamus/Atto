@@ -50,6 +50,8 @@ class FAttoConnection final : public FNoncopyable
 
 	FAttoQueryServerUtcTimeRequest::Result operator()(const FAttoQueryServerUtcTimeRequest& Message);
 
+	FAttoCancelMatchmakingRequest::Result operator()(const FAttoCancelMatchmakingRequest& Message);
+
 public:
 	explicit FAttoConnection(FAttoServerInstance& Server, lws* LwsConnection)
 	    : Server(Server)

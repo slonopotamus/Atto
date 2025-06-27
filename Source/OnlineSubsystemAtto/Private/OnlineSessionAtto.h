@@ -4,6 +4,7 @@
 #include "OnlineSessionSettings.h"
 
 class FOnlineSubsystemAtto;
+struct FAttoSessionInfoEx;
 
 class FOnlineSessionAtto final : public IOnlineSession
 {
@@ -22,6 +23,8 @@ class FOnlineSessionAtto final : public IOnlineSession
 
 	static TSharedRef<FInternetAddr> DetermineSessionPublicAddress();
 	int32 DetermineSessionPublicPort() const;
+
+	bool TryAddSession(const FAttoSessionInfoEx& SessionInfo);
 
 protected:
 	virtual FNamedOnlineSession* AddNamedSession(FName SessionName, const FOnlineSessionSettings& SessionSettings) override;

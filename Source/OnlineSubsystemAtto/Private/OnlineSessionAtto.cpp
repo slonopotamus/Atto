@@ -275,35 +275,70 @@ bool FOnlineSessionAtto::IsPlayerInSession(const FName SessionName, const FUniqu
 
 bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueNetId>>& LocalPlayers, const FName SessionName, const FOnlineSessionSettings& NewSessionSettings, TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
-	TriggerOnMatchmakingCompleteDelegates(SessionName, false);
-	return false;
+	Subsystem.AttoClient
+	    ->Send<FAttoStartMatchmakingRequest>()
+	    .Next([=, this](auto&& Response) {
+	    	if (!Response.IsOk())
+	    	{
+			    TriggerOnMatchmakingCompleteDelegates(SessionName, false);
+	    		return;
+	    	}
+
+	    	if (const auto* SessionInfo = Response.GetOkValue().template TryGet<FOnlineSessionInfoAtto>())
+	    	{
+	    		auto* Session = AddNamedSession(SessionName, SessionInfo->);
+				Session->SessionInfo = DesiredSession.Session.SessionInfo;
+
+	    		TriggerOnMatchmakingCompleteDelegates(SessionName, Response.GetOkValue().bSuccess);
+	    	}
+	    	else
+	    	{
+				const auto& Error = Response.GetOkValue().template Get<FString>();
+				UE_LOG_ONLINE(Warning, TEXT("Matchmaking failed: %s"), *Error);
+				TriggerOnMatchmakingCompleteDelegates(SessionName, false);
+	    	}
+	    });
+
+	return true;
 }
 
-bool FOnlineSessionAtto::CancelMatchmaking(int32 SearchingPlayerNum, const FName SessionName)
+bool FOnlineSessionAtto::CancelMatchmaking(const int32 SearchingPlayerNum, const FName SessionName)
 {
-	TriggerOnCancelMatchmakingCompleteDelegates(SessionName, false);
-	return false;
+	const auto& UserId = Subsystem.IdentityInterface->GetUniquePlayerId(SearchingPlayerNum);
+	return CancelMatchmaking(UserId ? UserId : FUniqueNetIdAtto::Invalid, SessionName);
 }
 
 bool FOnlineSessionAtto::CancelMatchmaking(const FUniqueNetId& SearchingPlayerId, const FName SessionName)
 {
-	TriggerOnCancelMatchmakingCompleteDelegates(SessionName, false);
-	return false;
+	if (const auto& UserId = static_cast<const FUniqueNetIdAtto&>(SearchingPlayerId); !UserId.IsValid())
+	{
+		TriggerOnCancelMatchmakingCompleteDelegates(SessionName, false);
+		return false;
+	}
+
+	Subsystem.AttoClient
+	    ->Send<FAttoCancelMatchmakingRequest>()
+	    .Next([=, this](auto&& Response) {
+		    TriggerOnCancelMatchmakingCompleteDelegates(SessionName, Response.IsOk());
+	    });
+
+	return true;
 }
 
 bool FOnlineSessionAtto::FindSessions(const int32 SearchingPlayerNum, const TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
-	if (const auto& UserId = Subsystem.IdentityInterface->GetUniquePlayerId(SearchingPlayerNum))
-	{
-		return FindSessions(*UserId, SearchSettings);
-	}
-
-	TriggerOnFindSessionsCompleteDelegates(false);
-	return false;
+	const auto& UserId = Subsystem.IdentityInterface->GetUniquePlayerId(SearchingPlayerNum);
+	return FindSessions(*UserId, SearchSettings);
 }
 
 bool FOnlineSessionAtto::FindSessions(const FUniqueNetId& SearchingPlayerId, const TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
+	if (!SearchingPlayerId.IsValid())
+	{
+		TriggerOnFindSessionsCompleteDelegates(false);
+		return false;
+	}
+
 	if (CurrentSessionSearch.IsSet())
 	{
 		UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring game search request while one is pending"));
@@ -324,6 +359,7 @@ bool FOnlineSessionAtto::FindSessions(const FUniqueNetId& SearchingPlayerId, con
 		    {
 			    // TODO: Log error?
 			    CurrentSessionSearch.Reset();
+		    	// TODO: Should we fire delegates if CancelFindSessions was called?
 			    TriggerOnFindSessionsCompleteDelegates(false);
 			    return;
 		    }
@@ -467,9 +503,7 @@ bool FOnlineSessionAtto::JoinSession(const int32 LocalUserNum, const FName Sessi
 	}
 
 	auto* Session = AddNamedSession(SessionName, DesiredSession.Session);
-	Session->HostingPlayerNum = LocalUserNum;
 	Session->SessionInfo = DesiredSession.Session.SessionInfo;
-	Session->SessionSettings.bShouldAdvertise = false;
 
 	TriggerOnJoinSessionCompleteDelegates(SessionName, EOnJoinSessionCompleteResult::Success);
 	return true;

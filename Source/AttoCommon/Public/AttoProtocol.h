@@ -291,6 +291,50 @@ struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
 	};
 };
 
+struct ATTOCOMMON_API FAttoStartMatchmakingRequest
+{
+	// Workaround to fix clang-format 19 messing up everything
+	bool bDummy = false;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoStartMatchmakingRequest& Message)
+	{
+		return Ar;
+	}
+
+	struct ATTOCOMMON_API Result
+	{
+		TVariant<FAttoSessionInfoEx, FString> SessionOrError;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar << Message.SessionOrError;
+			return Ar;
+		}
+	};
+};
+
+struct ATTOCOMMON_API FAttoCancelMatchmakingRequest
+{
+	// Workaround to fix clang-format 19 messing up everything
+	bool bDummy = false;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoCancelMatchmakingRequest& Message)
+	{
+		return Ar;
+	}
+
+	struct ATTOCOMMON_API Result
+	{
+		bool bSuccess = false;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar << Message.bSuccess;
+			return Ar;
+		}
+	};
+};
+
 using FAttoC2SProtocol = TVariant<
     FAttoLoginRequest,
     FAttoLogoutRequest,
@@ -298,7 +342,8 @@ using FAttoC2SProtocol = TVariant<
     FAttoUpdateSessionRequest,
     FAttoDestroySessionRequest,
     FAttoFindSessionsRequest,
-    FAttoQueryServerUtcTimeRequest>;
+    FAttoQueryServerUtcTimeRequest,
+    FAttoCancelMatchmakingRequest>;
 
 using FAttoS2CProtocol = TVariant<
     FAttoLoginRequest::Result,
@@ -307,4 +352,5 @@ using FAttoS2CProtocol = TVariant<
     FAttoUpdateSessionRequest::Result,
     FAttoDestroySessionRequest::Result,
     FAttoFindSessionsRequest::Result,
-    FAttoQueryServerUtcTimeRequest::Result>;
+    FAttoQueryServerUtcTimeRequest::Result,
+    FAttoCancelMatchmakingRequest::Result>;

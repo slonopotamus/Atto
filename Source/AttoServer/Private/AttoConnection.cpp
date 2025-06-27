@@ -227,3 +227,7 @@ FAttoQueryServerUtcTimeRequest::Result FAttoConnection::operator()(const FAttoQu
 {
 	return {FDateTime::UtcNow()};
 }
+
+FAttoCancelMatchmakingRequest::Result FAttoConnection::operator()(const FAttoCancelMatchmakingRequest& Message)
+{
+}
