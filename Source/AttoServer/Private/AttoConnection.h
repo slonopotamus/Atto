@@ -36,19 +36,19 @@ class FAttoConnection final : public FNoncopyable
 		Send(RequestId, FAttoS2CProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
 	}
 
-	FAttoLoginRequest::Result operator()(const FAttoLoginRequest& Message);
+	TFuture<FAttoLoginRequest::Result> operator()(const FAttoLoginRequest& Message);
 
-	FAttoLogoutRequest::Result operator()(const FAttoLogoutRequest& Message);
+	TFuture<FAttoLogoutRequest::Result> operator()(const FAttoLogoutRequest& Message);
 
-	FAttoCreateSessionRequest::Result operator()(const FAttoCreateSessionRequest& Message);
+	TFuture<FAttoCreateSessionRequest::Result> operator()(const FAttoCreateSessionRequest& Message);
 
-	FAttoUpdateSessionRequest::Result operator()(const FAttoUpdateSessionRequest& Message);
+	TFuture<FAttoUpdateSessionRequest::Result> operator()(const FAttoUpdateSessionRequest& Message);
 
-	FAttoDestroySessionRequest::Result operator()(const FAttoDestroySessionRequest& Message);
+	TFuture<FAttoDestroySessionRequest::Result> operator()(const FAttoDestroySessionRequest& Message);
 
-	FAttoFindSessionsRequest::Result operator()(const FAttoFindSessionsRequest& Message);
+	TFuture<FAttoFindSessionsRequest::Result> operator()(const FAttoFindSessionsRequest& Message);
 
-	FAttoQueryServerUtcTimeRequest::Result operator()(const FAttoQueryServerUtcTimeRequest& Message);
+	TFuture<FAttoQueryServerUtcTimeRequest::Result> operator()(const FAttoQueryServerUtcTimeRequest& Message);
 
 public:
 	explicit FAttoConnection(FAttoServerInstance& Server, lws* LwsConnection)

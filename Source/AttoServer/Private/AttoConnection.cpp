@@ -40,8 +40,11 @@ void FAttoConnection::ReceiveInternal(const void* Data, const size_t Size)
 	{
 		Visit(
 		    [&]<typename RequestType>(const RequestType& Variant) {
-			    static_assert(std::is_same_v<typename RequestType::Result, decltype(operator()(Variant))>);
-			    Send(RequestId, FAttoS2CProtocol{TInPlaceType<typename RequestType::Result>{}, operator()(Variant)});
+			    static_assert(std::is_same_v<TFuture<typename RequestType::Result>, decltype(operator()(Variant))>);
+			    operator()(Variant)
+			        .Next([=, this](auto&& Result) {
+				        Send(RequestId, FAttoS2CProtocol{TInPlaceType<typename RequestType::Result>{}, Result});
+			        });
 		    },
 		    Message);
 	}
@@ -120,34 +123,38 @@ void FAttoConnection::SendFromQueueInternal()
 	}
 }
 
-FAttoLoginRequest::Result FAttoConnection::operator()(const FAttoLoginRequest& Message)
+TFuture<FAttoLoginRequest::Result> FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
-	if (Message.BuildUniqueId != GetBuildUniqueId())
-	{
-		return FAttoLoginRequest::Result{
-		    TInPlaceType<FString>(),
-		    FString::Printf(TEXT("Rejecting login [%s]: mismatched build id. Server: %d != Client: %d"), *Message.Username, GetBuildUniqueId(), Message.BuildUniqueId)};
-	}
+	auto Func = [&]() -> FAttoLoginRequest::Result {
+		if (Message.BuildUniqueId != GetBuildUniqueId())
+		{
+			return FAttoLoginRequest::Result{
+			    TInPlaceType<FString>(),
+			    FString::Printf(TEXT("Rejecting login [%s]: mismatched build id. Server: %d != Client: %d"), *Message.Username, GetBuildUniqueId(), Message.BuildUniqueId)};
+		}
 
-	if (Message.Username.IsEmpty())
-	{
-		return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Username must not be empty")};
-	}
+		if (Message.Username.IsEmpty())
+		{
+			return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Username must not be empty")};
+		}
 
-	if (Message.Username != Message.Password)
-	{
-		return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Wrong password")};
-	}
+		if (Message.Username != Message.Password)
+		{
+			return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Wrong password")};
+		}
 
-	const auto Guid = FGuid::NewGuid();
-	const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));
-	Users.Add(Id);
+		const auto Guid = FGuid::NewGuid();
+		const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));
+		Users.Add(Id);
 
-	// TODO: TInPlaceType is weird
-	return FAttoLoginRequest::Result{TInPlaceType<uint64>(), Id};
+		// TODO: TInPlaceType is weird
+		return FAttoLoginRequest::Result{TInPlaceType<uint64>(), Id};
+	};
+
+	return MakeFulfilledPromise<FAttoLoginRequest::Result>(Func()).GetFuture();
 }
 
-FAttoLogoutRequest::Result FAttoConnection::operator()(const FAttoLogoutRequest& Message)
+TFuture<FAttoLogoutRequest::Result> FAttoConnection::operator()(const FAttoLogoutRequest& Message)
 {
 	const bool bSuccess = Users.Remove(Message.UserId) > 0;
 
@@ -156,49 +163,52 @@ FAttoLogoutRequest::Result FAttoConnection::operator()(const FAttoLogoutRequest&
 		Server.Sessions.Remove(Message.UserId);
 	}
 
-	return {bSuccess};
+	return MakeFulfilledPromise<FAttoLogoutRequest::Result>(bSuccess).GetFuture();
 }
 
-FAttoCreateSessionRequest::Result FAttoConnection::operator()(const FAttoCreateSessionRequest& Message)
+TFuture<FAttoCreateSessionRequest::Result> FAttoConnection::operator()(const FAttoCreateSessionRequest& Message)
 {
-	if (!Users.Contains(Message.SessionInfo.OwningUserId))
+	bool bSuccess = false;
+
+	if (Users.Contains(Message.SessionInfo.OwningUserId))
 	{
-		return {false};
+		// TODO: Check if entry already exists? For any of users? But what if they login later?
+		Server.Sessions.Add(Message.SessionInfo.OwningUserId, Message.SessionInfo.SessionInfo);
+		bSuccess = true;
 	}
 
-	// TODO: Check if entry already exists? For any of users? But what if they login later?
-	Server.Sessions.Add(Message.SessionInfo.OwningUserId, Message.SessionInfo.SessionInfo);
-	return {true};
+	return MakeFulfilledPromise<FAttoCreateSessionRequest::Result>(bSuccess).GetFuture();
 }
 
-FAttoUpdateSessionRequest::Result FAttoConnection::operator()(const FAttoUpdateSessionRequest& Message)
+TFuture<FAttoUpdateSessionRequest::Result> FAttoConnection::operator()(const FAttoUpdateSessionRequest& Message)
 {
-	if (!Users.Contains(Message.OwningUserId))
+	bool bSuccess = false;
+
+	if (Users.Contains(Message.OwningUserId))
 	{
-		return {false};
+		if (auto* Session = Server.Sessions.Find(Message.OwningUserId))
+		{
+			Session->UpdatableInfo = Message.SessionInfo;
+			bSuccess = true;
+		}
 	}
 
-	auto* Session = Server.Sessions.Find(Message.OwningUserId);
-	if (!Session)
-	{
-		return {false};
-	}
-
-	Session->UpdatableInfo = Message.SessionInfo;
-	return {true};
+	return MakeFulfilledPromise<FAttoUpdateSessionRequest::Result>(bSuccess).GetFuture();
 }
 
-FAttoDestroySessionRequest::Result FAttoConnection::operator()(const FAttoDestroySessionRequest& Message)
+TFuture<FAttoDestroySessionRequest::Result> FAttoConnection::operator()(const FAttoDestroySessionRequest& Message)
 {
-	if (!Users.Contains(Message.OwningUserId))
+	bool bSuccess = false;
+
+	if (Users.Contains(Message.OwningUserId))
 	{
-		return {false};
+		bSuccess = Server.Sessions.Remove(Message.OwningUserId) > 0;
 	}
 
-	return {Server.Sessions.Remove(Message.OwningUserId) > 0};
+	return MakeFulfilledPromise<FAttoDestroySessionRequest::Result>(bSuccess).GetFuture();
 }
 
-FAttoFindSessionsRequest::Result FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
+TFuture<FAttoFindSessionsRequest::Result> FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 {
 	TArray<FAttoSessionInfoEx> Sessions;
 
@@ -227,10 +237,10 @@ FAttoFindSessionsRequest::Result FAttoConnection::operator()(const FAttoFindSess
 		}
 	}
 
-	return {Message.RequestId, MoveTemp(Sessions)};
+	return MakeFulfilledPromise<FAttoFindSessionsRequest::Result>(Message.RequestId, MoveTemp(Sessions)).GetFuture();
 }
 
-FAttoQueryServerUtcTimeRequest::Result FAttoConnection::operator()(const FAttoQueryServerUtcTimeRequest& Message)
+TFuture<FAttoQueryServerUtcTimeRequest::Result> FAttoConnection::operator()(const FAttoQueryServerUtcTimeRequest& Message)
 {
-	return {FDateTime::UtcNow()};
+	return MakeFulfilledPromise<FAttoQueryServerUtcTimeRequest::Result>(FDateTime::UtcNow()).GetFuture();
 }
