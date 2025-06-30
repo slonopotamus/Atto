@@ -14,13 +14,13 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 
 	TSharedRef<IWebSocket> WebSocket;
 
-	void Send(int64 RequestId, FAttoC2SProtocol&& Message);
+	void Send(int64 RequestId, FAttoClientRequestProtocol&& Message);
 
 	struct IRequestPromise : FNoncopyable
 	{
 		virtual ~IRequestPromise() = default;
 
-		virtual void Handle(FAttoS2CProtocol&& Response) = 0;
+		virtual void Handle(FAttoServerResponseProtocol&& Response) = 0;
 
 		virtual void HandleDisconnect() = 0;
 	};
@@ -30,7 +30,7 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 	{
 		TSharedPtr<TPromise<UE::Online::TOnlineResult<T>>> Promise = MakeShared<TPromise<UE::Online::TOnlineResult<T>>>();
 
-		virtual void Handle(FAttoS2CProtocol&& Response) override
+		virtual void Handle(FAttoServerResponseProtocol&& Response) override
 		{
 			if (ensure(Promise))
 			{
@@ -97,6 +97,9 @@ public:
 	DECLARE_EVENT_TwoParams(FAttoClient, FAttoDisconnectedEvent, const FString& /* Reason */, bool /* bWasClean */);
 	FAttoDisconnectedEvent OnDisconnected;
 
+	DECLARE_EVENT_OneParam(FAttoClient, FAttoServerPushEvent, const FAttoServerPushProtocol& /* Message */);
+	FAttoServerPushEvent OnServerPush;
+
 	template<
 	    typename T,
 	    typename... ArgTypes
@@ -115,7 +118,7 @@ public:
 		auto Future = Promise->Promise->GetFuture();
 		const auto RequestId = ++LastRequestId;
 		RequestPromises.Add(RequestId, MoveTemp(Promise));
-		Send(RequestId, FAttoC2SProtocol{TInPlaceType<T>(), Forward<ArgTypes>(Args)...});
+		Send(RequestId, FAttoClientRequestProtocol{TInPlaceType<T>(), Forward<ArgTypes>(Args)...});
 		return Future;
 	}
 

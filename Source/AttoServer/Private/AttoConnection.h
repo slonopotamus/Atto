@@ -23,17 +23,43 @@ class FAttoConnection final : public FNoncopyable
 
 	TQueue<FAttoMessage> SendQueue;
 
-	void Send(const void* Data, size_t Size);
+	void SendRaw(const void* Data, size_t Size);
 
-	void Send(int64 RequestId, FAttoS2CProtocol&& Message);
+	template<typename T>
+	void SendImpl(int64 RequestId, T&& Message)
+	{
+		// TODO: Store writer between calls to reduce allocations?
+		FBitWriter Ar{0, true};
+
+		Ar << RequestId;
+		Ar << Message;
+
+		if (ensure(!Ar.IsError()))
+		{
+			SendRaw(Ar.GetData(), Ar.GetNumBytes());
+		}
+	}
+
+	void Send(const int64 RequestId, FAttoServerResponseProtocol&& Message)
+	{
+		if (ensure(RequestId != SERVER_PUSH_REQUEST_ID))
+		{
+			SendImpl(RequestId, Message);
+		}
+	}
+
+	void Send(FAttoServerPushProtocol&& Message)
+	{
+		SendImpl(SERVER_PUSH_REQUEST_ID, Message);
+	}
 
 	template<
 	    typename V,
 	    typename... ArgTypes
 	        UE_REQUIRES(std::is_constructible_v<V, ArgTypes...>)>
-	void Send(int64 RequestId, ArgTypes&&... Args)
+	void Send(const int64 RequestId, ArgTypes&&... Args)
 	{
-		Send(RequestId, FAttoS2CProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
+		Send(RequestId, FAttoServerResponseProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
 	}
 
 	TFuture<FAttoLoginRequest::Result> operator()(const FAttoLoginRequest& Message);

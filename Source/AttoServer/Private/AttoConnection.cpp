@@ -31,30 +31,36 @@ void FAttoConnection::ReceiveInternal(const void* Data, const size_t Size)
 
 	FBitReader Ar{static_cast<const uint8*>(Data), static_cast<int64>(Size * 8)};
 
-	int64 RequestId = 0;
+	int64 RequestId = SERVER_PUSH_REQUEST_ID;
 	Ar << RequestId;
-	FAttoC2SProtocol Message;
+
+	if (!ensure(RequestId != SERVER_PUSH_REQUEST_ID))
+	{
+		// TODO: Disconnect them?
+		return;
+	}
+
+	FAttoClientRequestProtocol Message;
 	Ar << Message;
 
-	if (ensure(!Ar.IsError()))
+	if (!ensure(!Ar.IsError()))
 	{
-		Visit(
-		    [&]<typename RequestType>(const RequestType& Variant) {
-			    static_assert(std::is_same_v<TFuture<typename RequestType::Result>, decltype(operator()(Variant))>);
-			    operator()(Variant)
-			        .Next([=, this](auto&& Result) {
-				        Send(RequestId, FAttoS2CProtocol{TInPlaceType<typename RequestType::Result>{}, Result});
-			        });
-		    },
-		    Message);
+		// TODO: Disconnect them?
+		return;
 	}
-	else
-	{
-		// TODO: Maybe just disconnect them?
-	}
+
+	Visit(
+	    [&]<typename RequestType>(const RequestType& Variant) {
+		    static_assert(std::is_same_v<TFuture<typename RequestType::Result>, decltype(operator()(Variant))>);
+		    operator()(Variant)
+		        .Next([=, this](auto&& Result) {
+			        Send(RequestId, FAttoServerResponseProtocol{TInPlaceType<typename RequestType::Result>{}, Result});
+		        });
+	    },
+	    Message);
 }
 
-void FAttoConnection::Send(const void* Data, const size_t Size)
+void FAttoConnection::SendRaw(const void* Data, const size_t Size)
 {
 	if (!ensure(Data))
 	{
@@ -72,20 +78,6 @@ void FAttoConnection::Send(const void* Data, const size_t Size)
 	});
 
 	lws_callback_on_writable(LwsConnection);
-}
-
-void FAttoConnection::Send(int64 RequestId, FAttoS2CProtocol&& Message)
-{
-	// TODO: Store writer between calls to reduce allocations?
-	FBitWriter Ar{0, true};
-
-	Ar << RequestId;
-	Ar << Message;
-
-	if (ensure(!Ar.IsError()))
-	{
-		Send(Ar.GetData(), Ar.GetNumBytes());
-	}
 }
 
 void FAttoConnection::SendFromQueueInternal()
