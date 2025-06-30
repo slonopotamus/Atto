@@ -45,9 +45,23 @@ FAttoClient::FAttoClient(const FString& Url)
 
 		FBitReader Ar{static_cast<const uint8*>(Data), static_cast<int64>(Size * 8)};
 
-		int64 RequestId = 0;
+		int64 RequestId = SERVER_PUSH_REQUEST_ID;
 		Ar << RequestId;
-		FAttoS2CProtocol Message;
+
+		if (RequestId == SERVER_PUSH_REQUEST_ID)
+		{
+			FAttoServerPushProtocol Message;
+			Ar << Message;
+
+			if (ensure(!Ar.IsError()))
+			{
+				OnServerPush.Broadcast(Message);
+			}
+
+			return;
+		}
+
+		FAttoServerResponseProtocol Message;
 		Ar << Message;
 
 		if (ensure(!Ar.IsError()))
@@ -91,7 +105,7 @@ void FAttoClient::Disconnect()
 	WebSocket->Close();
 }
 
-void FAttoClient::Send(int64 RequestId, FAttoC2SProtocol&& Message)
+void FAttoClient::Send(int64 RequestId, FAttoClientRequestProtocol&& Message)
 {
 	// TODO: Store writer between calls to reduce allocations?
 	FBitWriter Ar{0, true};

@@ -295,7 +295,18 @@ struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
 	};
 };
 
-using FAttoC2SProtocol = TVariant<
+struct ATTOCOMMON_API FAttoDummyServerPush
+{
+	// Workaround to fix clang-format 19 messing up everything
+	bool bDummy = false;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoDummyServerPush& Message)
+	{
+		return Ar;
+	}
+};
+
+using FAttoClientRequestProtocol = TVariant<
     FAttoLoginRequest,
     FAttoLogoutRequest,
     FAttoCreateSessionRequest,
@@ -304,7 +315,7 @@ using FAttoC2SProtocol = TVariant<
     FAttoFindSessionsRequest,
     FAttoQueryServerUtcTimeRequest>;
 
-using FAttoS2CProtocol = TVariant<
+using FAttoServerResponseProtocol = TVariant<
     FAttoLoginRequest::Result,
     FAttoLogoutRequest::Result,
     FAttoCreateSessionRequest::Result,
@@ -312,3 +323,8 @@ using FAttoS2CProtocol = TVariant<
     FAttoDestroySessionRequest::Result,
     FAttoFindSessionsRequest::Result,
     FAttoQueryServerUtcTimeRequest::Result>;
+
+using FAttoServerPushProtocol = TVariant<
+    FAttoDummyServerPush>;
+
+constexpr int64 SERVER_PUSH_REQUEST_ID = 0;
