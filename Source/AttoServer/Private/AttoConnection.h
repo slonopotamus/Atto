@@ -16,6 +16,7 @@ class FAttoConnection final : public FNoncopyable
 {
 	FAttoServerInstance& Server;
 	lws* const LwsConnection;
+	FGuid MatchmakingToken;
 
 	// TODO: Separate dedicated servers from real users?
 	/** User ids of currently logged-in users on this connection */
@@ -75,6 +76,10 @@ class FAttoConnection final : public FNoncopyable
 	TFuture<FAttoFindSessionsRequest::Result> operator()(const FAttoFindSessionsRequest& Message);
 
 	TFuture<FAttoQueryServerUtcTimeRequest::Result> operator()(const FAttoQueryServerUtcTimeRequest& Message);
+
+	TFuture<FAttoStartMatchmakingRequest::Result> operator()(const FAttoStartMatchmakingRequest& Message);
+
+	TFuture<FAttoCancelMatchmakingRequest::Result> operator()(const FAttoCancelMatchmakingRequest& Message);
 
 public:
 	explicit FAttoConnection(FAttoServerInstance& Server, lws* LwsConnection)

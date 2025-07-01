@@ -10,9 +10,11 @@ THIRD_PARTY_INCLUDES_END
 
 FAttoConnection::~FAttoConnection()
 {
+	Server.Matchmaker.Cancel(MatchmakingToken);
+
 	for (const auto& UserId : Users)
 	{
-		Server.Sessions.Remove(UserId);
+		Server.OnLogout(UserId);
 	}
 }
 
@@ -152,7 +154,8 @@ TFuture<FAttoLogoutRequest::Result> FAttoConnection::operator()(const FAttoLogou
 
 	if (bSuccess)
 	{
-		Server.Sessions.Remove(Message.UserId);
+		Server.Matchmaker.Cancel(MatchmakingToken);
+		Server.OnLogout(Message.UserId);
 	}
 
 	return MakeFulfilledPromise<FAttoLogoutRequest::Result>(bSuccess).GetFuture();
@@ -202,7 +205,7 @@ TFuture<FAttoDestroySessionRequest::Result> FAttoConnection::operator()(const FA
 
 TFuture<FAttoFindSessionsRequest::Result> FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 {
-	TArray<FAttoSessionInfoEx> Sessions;
+	TArray<FAttoSessionInfo> Sessions;
 
 	if (!Users.IsEmpty())
 	{
@@ -225,7 +228,7 @@ TFuture<FAttoFindSessionsRequest::Result> FAttoConnection::operator()(const FAtt
 				continue;
 			}
 
-			Sessions.Emplace(OwningUserId, Session);
+			Sessions.Add(Session);
 		}
 	}
 
@@ -235,4 +238,47 @@ TFuture<FAttoFindSessionsRequest::Result> FAttoConnection::operator()(const FAtt
 TFuture<FAttoQueryServerUtcTimeRequest::Result> FAttoConnection::operator()(const FAttoQueryServerUtcTimeRequest& Message)
 {
 	return MakeFulfilledPromise<FAttoQueryServerUtcTimeRequest::Result>(FDateTime::UtcNow()).GetFuture();
+}
+
+TFuture<FAttoStartMatchmakingRequest::Result> FAttoConnection::operator()(const FAttoStartMatchmakingRequest& Message)
+{
+	if (Users.Num() != Message.Users.Num())
+	{
+		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, FString::Printf(TEXT("All connected users must enter matchmaking"))).GetFuture();
+	}
+
+	for (const auto& User : Message.Users)
+	{
+		if (!Users.Contains(User))
+		{
+			return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, FString::Printf(TEXT("User %016llx is not logged in"), User)).GetFuture();
+		}
+	}
+
+	if (MatchmakingToken.IsValid())
+	{
+		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, TEXT("Already in matchmaking queue")).GetFuture();
+	}
+
+	// TODO: Respect Message.Params
+	return Server.Matchmaker.Enqueue(MatchmakingToken, Users.Num(), Message.Timeout)
+	    .Next([=, this](const auto* Session) {
+		    if (Session)
+		    {
+			    return FAttoStartMatchmakingRequest::Result{TInPlaceType<FAttoSessionInfo>{}, *Session};
+		    }
+		    return FAttoStartMatchmakingRequest::Result{TInPlaceType<FAttoStartMatchmakingRequest::FTimeout>{}, FAttoStartMatchmakingRequest::FTimeout{}};
+	    });
+}
+
+TFuture<FAttoCancelMatchmakingRequest::Result> FAttoConnection::operator()(const FAttoCancelMatchmakingRequest& Message)
+{
+	bool bSuccess = false;
+
+	if (Users.Contains(Message.UserId))
+	{
+		bSuccess = Server.Matchmaker.Cancel(MatchmakingToken);
+	}
+
+	return MakeFulfilledPromise<FAttoCancelMatchmakingRequest::Result>(bSuccess).GetFuture();
 }

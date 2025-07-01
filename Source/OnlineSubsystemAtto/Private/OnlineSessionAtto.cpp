@@ -135,8 +135,7 @@ bool FOnlineSessionAtto::CreateSession(const int32 HostingPlayerNum, const FName
 		        .OwningUserId = OwningUserId->Value,
 		        .SessionInfo = FAttoSessionInfo{
 		            .SessionId = SessionId->Value,
-		            .HostAddress = HostAddress->GetRawIp(),
-		            .Port = HostAddress->GetPort(),
+		            .HostAddress = FAttoSessionAddress{HostAddress.Get()},
 		            .BuildUniqueId = Session->SessionSettings.BuildUniqueId,
 		            .UpdatableInfo = FAttoSessionUpdatableInfo{*Session},
 		            .bIsDedicated = Session->SessionSettings.bIsDedicated,
@@ -273,99 +272,273 @@ bool FOnlineSessionAtto::IsPlayerInSession(const FName SessionName, const FUniqu
 	return IsPlayerInSessionImpl(this, SessionName, UniqueId);
 }
 
-bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueNetId>>& LocalPlayers, const FName SessionName, const FOnlineSessionSettings& NewSessionSettings, TSharedRef<FOnlineSessionSearch>& SearchSettings)
+template<typename T>
+static TOptional<FAttoFindSessionsParamValue> GetValueFromVariantData(const FVariantData& Data)
 {
-	TriggerOnMatchmakingCompleteDelegates(SessionName, false);
-	return false;
+	T Result{};
+	Data.GetValue(Result);
+	return {FAttoFindSessionsParamValue{TInPlaceType<T>{}, MoveTemp(Result)}};
 }
 
-bool FOnlineSessionAtto::CancelMatchmaking(int32 SearchingPlayerNum, const FName SessionName)
+// FVariantData is just brain-damaged
+static TOptional<FAttoFindSessionsParamValue> ConvertVariantData(const FVariantData& Data)
 {
-	TriggerOnCancelMatchmakingCompleteDelegates(SessionName, false);
-	return false;
+	switch (Data.GetType())
+	{
+		case EOnlineKeyValuePairDataType::Empty:
+			// TODO: How to handle this?
+			return {};
+		case EOnlineKeyValuePairDataType::Int32:
+			return GetValueFromVariantData<int32>(Data);
+		case EOnlineKeyValuePairDataType::UInt32:
+			return GetValueFromVariantData<uint32>(Data);
+		case EOnlineKeyValuePairDataType::Int64:
+			return GetValueFromVariantData<int64>(Data);
+		case EOnlineKeyValuePairDataType::UInt64:
+			return GetValueFromVariantData<uint64>(Data);
+		case EOnlineKeyValuePairDataType::Double:
+			return GetValueFromVariantData<double>(Data);
+		case EOnlineKeyValuePairDataType::String:
+			return GetValueFromVariantData<FString>(Data);
+		case EOnlineKeyValuePairDataType::Float:
+			return GetValueFromVariantData<float>(Data);
+		case EOnlineKeyValuePairDataType::Blob:
+			return GetValueFromVariantData<TArray<uint8>>(Data);
+		case EOnlineKeyValuePairDataType::Bool:
+			return GetValueFromVariantData<bool>(Data);
+		case EOnlineKeyValuePairDataType::Json:
+			// TODO: Add support
+			ensureMsgf(false, TEXT("JSON is not supported"));
+			return {};
+		case EOnlineKeyValuePairDataType::MAX: [[fallthrough]];
+		default:
+			ensureMsgf(false, TEXT("Unknown EOnlineKeyValuePairDataType: %d"), Data.GetType());
+			return {};
+	}
+}
+
+static TMap<FName, FAttoFindSessionsParam> ConvertSearchParams(const FSearchParams& Params)
+{
+	TMap<FName, FAttoFindSessionsParam> Result;
+
+	for (const auto& [Name, Value] : Params)
+	{
+		if (const auto& ParamValue = ConvertVariantData(Value.Data))
+		{
+			Result.Add(Name, FAttoFindSessionsParam{Value.ComparisonOp, *ParamValue, Value.ID});
+		}
+	}
+
+	return Result;
+}
+
+bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueNetId>>& LocalPlayers, const FName SessionName, const FOnlineSessionSettings& NewSessionSettings, TSharedRef<FOnlineSessionSearch>& SearchSettings)
+{
+	if (CurrentMatchmaking.IsValid())
+	{
+		UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring matchmaking request while one is pending"));
+		return false;
+	}
+
+	if (LocalPlayers.IsEmpty())
+	{
+		TriggerOnMatchmakingCompleteDelegates(SessionName, false);
+		return false;
+	}
+
+	const auto SearchingPlayerIdRef = LocalPlayers[0]->AsShared();
+	if (!SearchingPlayerIdRef->IsValid())
+	{
+		TriggerOnMatchmakingCompleteDelegates(SessionName, false);
+		return false;
+	}
+
+	TArray<uint64> UserIds;
+	for (const auto& UserId : LocalPlayers)
+	{
+		if (const auto& AttoUserId = StaticCastSharedRef<const FUniqueNetIdAtto>(UserId); AttoUserId->IsValid())
+		{
+			UserIds.Add(AttoUserId->Value);
+		}
+		else
+		{
+			TriggerOnMatchmakingCompleteDelegates(SessionName, false);
+			return false;
+		}
+	}
+
+	CurrentMatchmaking = SearchSettings;
+	CurrentMatchmaking->PlatformHash = FMath::Rand32();
+	CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::InProgress;
+
+	Subsystem.AttoClient
+	    ->Send<FAttoStartMatchmakingRequest>(UserIds, ConvertSearchParams(SearchSettings->QuerySettings.SearchParams), FTimespan::FromSeconds(SearchSettings->TimeoutInSeconds))
+	    .Next([=, this](auto&& Response) {
+		    if (!Response.IsOk())
+		    {
+			    if (CurrentMatchmaking)
+			    {
+				    CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::Failed;
+				    CurrentMatchmaking.Reset();
+			    }
+			    TriggerOnMatchmakingCompleteDelegates(SessionName, false);
+			    return;
+		    }
+
+		    if (const auto* SessionInfo = Response.GetOkValue().template TryGet<FAttoSessionInfo>())
+		    {
+			    FOnlineSession OnlineSession;
+			    const auto SessionId = FUniqueNetIdAtto::Create(SessionInfo->SessionId);
+
+			    OnlineSession.OwningUserId = SearchingPlayerIdRef;
+			    OnlineSession.SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, SessionInfo->HostAddress.ToInternetAddr());
+			    OnlineSession.SessionSettings.BuildUniqueId = SessionInfo->BuildUniqueId;
+			    auto* Session = AddNamedSession(SessionName, OnlineSession);
+			    SessionInfo->UpdatableInfo.CopyTo(*Session, nullptr);
+
+			    if (CurrentMatchmaking)
+			    {
+				    CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::Done;
+				    CurrentMatchmaking.Reset();
+			    }
+
+			    TriggerOnMatchmakingCompleteDelegates(SessionName, true);
+		    }
+		    else
+		    {
+			    const auto& Error = Response.GetOkValue().template Get<FString>();
+			    UE_LOG_ONLINE(Warning, TEXT("Matchmaking failed: %s"), *Error);
+
+			    if (CurrentMatchmaking)
+			    {
+				    CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::Done;
+				    CurrentMatchmaking.Reset();
+			    }
+
+			    TriggerOnMatchmakingCompleteDelegates(SessionName, false);
+		    }
+	    });
+
+	return true;
+}
+
+bool FOnlineSessionAtto::CancelMatchmaking(const int32 SearchingPlayerNum, const FName SessionName)
+{
+	const auto& UserId = Subsystem.IdentityInterface->GetUniquePlayerId(SearchingPlayerNum);
+	return CancelMatchmaking(UserId ? *UserId : FUniqueNetIdAtto::Invalid, SessionName);
 }
 
 bool FOnlineSessionAtto::CancelMatchmaking(const FUniqueNetId& SearchingPlayerId, const FName SessionName)
 {
-	TriggerOnCancelMatchmakingCompleteDelegates(SessionName, false);
-	return false;
+	if (!CurrentMatchmaking)
+	{
+		return false;
+	}
+
+	const auto& UserId = static_cast<const FUniqueNetIdAtto&>(SearchingPlayerId);
+	if (!UserId.IsValid())
+	{
+		TriggerOnCancelMatchmakingCompleteDelegates(SessionName, false);
+		return false;
+	}
+
+	CurrentMatchmaking.Reset();
+
+	Subsystem.AttoClient
+	    ->Send<FAttoCancelMatchmakingRequest>(UserId.Value)
+	    .Next([=, this](auto&& Response) {
+		    TriggerOnCancelMatchmakingCompleteDelegates(SessionName, Response.IsOk());
+	    });
+
+	return true;
 }
 
 bool FOnlineSessionAtto::FindSessions(const int32 SearchingPlayerNum, const TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
-	if (const auto& UserId = Subsystem.IdentityInterface->GetUniquePlayerId(SearchingPlayerNum))
-	{
-		return FindSessions(*UserId, SearchSettings);
-	}
-
-	TriggerOnFindSessionsCompleteDelegates(false);
-	return false;
+	const auto& UserId = Subsystem.IdentityInterface->GetUniquePlayerId(SearchingPlayerNum);
+	return FindSessions(*UserId, SearchSettings);
 }
 
 bool FOnlineSessionAtto::FindSessions(const FUniqueNetId& SearchingPlayerId, const TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
-	if (CurrentSessionSearch.IsSet())
+	if (CurrentSessionSearch)
 	{
 		UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring game search request while one is pending"));
+		return false;
+	}
 
+	if (!SearchingPlayerId.IsValid())
+	{
+		SearchSettings->SearchState = EOnlineAsyncTaskState::Failed;
 		TriggerOnFindSessionsCompleteDelegates(false);
 		return false;
 	}
 
-	SearchSettings->PlatformHash = FMath::Rand32();
+	CurrentSessionSearch = SearchSettings;
+	CurrentSessionSearch->PlatformHash = FMath::Rand32();
+	CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::InProgress;
 
-	CurrentSessionSearch = {
-	    .SearchSettings = SearchSettings,
-	};
+	const auto SearchingPlayerIdPtr = SearchingPlayerId.AsShared();
 
-	Subsystem.AttoClient->FindSessionsAsync(*SearchSettings)
+	Subsystem.AttoClient->Send<FAttoFindSessionsRequest>(
+	                        ConvertSearchParams(SearchSettings->QuerySettings.SearchParams),
+	                        SearchSettings->PlatformHash,
+	                        SearchSettings->MaxSearchResults)
 	    .Next([=, this](auto&& Result) {
 		    if (!Result.IsOk())
 		    {
 			    // TODO: Log error?
-			    CurrentSessionSearch.Reset();
+			    if (CurrentSessionSearch)
+			    {
+				    CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::Failed;
+				    CurrentSessionSearch.Reset();
+			    }
+
+			    // TODO: Should we fire delegates if CancelFindSessions was called?
 			    TriggerOnFindSessionsCompleteDelegates(false);
 			    return;
 		    }
 
-		    const auto& Message = Result.GetOkValue();
-		    if (const auto* Search = CurrentSessionSearch.GetPtrOrNull())
+		    if (!CurrentSessionSearch)
 		    {
-			    if (const auto& CurrentSearchId = Search->SearchSettings->PlatformHash; CurrentSearchId != Message.RequestId)
-			    {
-				    UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring game search response %d because current one is %d"), Message.RequestId, CurrentSearchId);
-				    return;
-			    }
-
-			    const auto BuildUniqueId = GetBuildUniqueId();
-
-			    for (const auto& Session : Result.GetOkValue().Sessions)
-			    {
-				    if (Session.SessionInfo.BuildUniqueId != BuildUniqueId)
-				    {
-					    continue;
-				    }
-
-				    const auto SessionAddress = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
-				    SessionAddress->SetRawIp(Session.SessionInfo.HostAddress);
-				    SessionAddress->SetPort(Session.SessionInfo.Port);
-
-				    // TODO: Use separate types for user ids and session ids?
-				    const auto SessionId = FUniqueNetIdAtto::Create(Session.SessionInfo.SessionId);
-
-				    auto& ResultSession = Search->SearchSettings->SearchResults.Emplace_GetRef();
-				    ResultSession.Session.OwningUserId = FUniqueNetIdAtto::Create(Session.OwningUserId);
-				    ResultSession.Session.SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, SessionAddress);
-				    ResultSession.Session.SessionSettings.BuildUniqueId = Session.SessionInfo.BuildUniqueId;
-				    Session.SessionInfo.UpdatableInfo.CopyTo(ResultSession.Session, nullptr);
-				    // TODO: Fill other fields
-			    }
-
-			    Search->SearchSettings->SortSearchResults();
-
-			    CurrentSessionSearch.Reset();
-			    TriggerOnFindSessionsCompleteDelegates(true);
+			    // The search was canceled
+			    return;
 		    }
+
+		    const auto& Message = Result.GetOkValue();
+		    if (const auto& CurrentSearchId = CurrentSessionSearch->PlatformHash; CurrentSearchId != Message.RequestId)
+		    {
+			    CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::Failed;
+			    CurrentSessionSearch.Reset();
+			    UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring game search response %d because current one is %d"), Message.RequestId, CurrentSearchId);
+			    return;
+		    }
+
+		    const auto BuildUniqueId = GetBuildUniqueId();
+
+		    for (const auto& Session : Result.GetOkValue().Sessions)
+		    {
+			    if (Session.BuildUniqueId != BuildUniqueId)
+			    {
+				    continue;
+			    }
+
+			    // TODO: Use separate types for user ids and session ids?
+			    const auto SessionId = FUniqueNetIdAtto::Create(Session.SessionId);
+
+			    auto& ResultSession = CurrentSessionSearch->SearchResults.Emplace_GetRef();
+			    ResultSession.Session.OwningUserId = SearchingPlayerIdPtr;
+			    ResultSession.Session.SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, Session.HostAddress.ToInternetAddr());
+			    ResultSession.Session.SessionSettings.BuildUniqueId = Session.BuildUniqueId;
+			    Session.UpdatableInfo.CopyTo(ResultSession.Session, nullptr);
+			    // TODO: Fill other fields
+		    }
+
+		    CurrentSessionSearch->SortSearchResults();
+		    CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::Done;
+		    CurrentSessionSearch.Reset();
+
+		    TriggerOnFindSessionsCompleteDelegates(true);
 	    });
 
 	return true;
@@ -424,7 +597,7 @@ bool FOnlineSessionAtto::CancelFindSessions()
 {
 	bool bSuccess = false;
 
-	if (CurrentSessionSearch.GetPtrOrNull())
+	if (CurrentSessionSearch)
 	{
 		CurrentSessionSearch.Reset();
 		bSuccess = true;
@@ -467,9 +640,7 @@ bool FOnlineSessionAtto::JoinSession(const int32 LocalUserNum, const FName Sessi
 	}
 
 	auto* Session = AddNamedSession(SessionName, DesiredSession.Session);
-	Session->HostingPlayerNum = LocalUserNum;
 	Session->SessionInfo = DesiredSession.Session.SessionInfo;
-	Session->SessionSettings.bShouldAdvertise = false;
 
 	TriggerOnJoinSessionCompleteDelegates(SessionName, EOnJoinSessionCompleteResult::Success);
 	return true;

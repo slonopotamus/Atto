@@ -121,6 +121,4 @@ public:
 		Send(RequestId, FAttoClientRequestProtocol{TInPlaceType<T>(), Forward<ArgTypes>(Args)...});
 		return Future;
 	}
-
-	TFuture<UE::Online::TOnlineResult<FAttoFindSessionsRequest>> FindSessionsAsync(const FOnlineSessionSearch& Search);
 };
