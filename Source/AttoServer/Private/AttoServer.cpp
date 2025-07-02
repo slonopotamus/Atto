@@ -10,6 +10,42 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 #undef UI
 
+bool FAttoMatchmaker::Cancel(FGuid& Token)
+{
+	if (Token.IsValid() && ensure(Queue.Remove(Token)))
+	{
+		Token.Invalidate();
+		return true;
+	}
+
+	return false;
+}
+
+TFuture<const FAttoSessionInfo*> FAttoMatchmaker::Enqueue(FGuid& Token, int32 UserCount, const FTimespan& Timeout)
+{
+	if (!ensure(!Token.IsValid()))
+	{
+		return MakeFulfilledPromise<const FAttoSessionInfo*>(nullptr).GetFuture();
+	}
+
+	if (!ensure(UserCount > 0))
+	{
+		return MakeFulfilledPromise<const FAttoSessionInfo*>(nullptr).GetFuture();
+	}
+
+	Token = FGuid::NewGuid();
+	return Queue.Add(Token, FAttoMatchmakerMember{
+	                            .Timeout = Timeout,
+	                            .UserCount = UserCount,
+	                            .Promise = MakeShared<TPromise<const FAttoSessionInfo*>>()})
+	    .Promise->GetFuture();
+}
+
+void FAttoMatchmaker::Tick()
+{
+	// TODO: MM
+}
+
 static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Reason, void* User, void* In, const size_t Len)
 {
 	if (const lws_protocols* Protocol = lws_get_protocol(LwsConnection))
@@ -104,8 +140,14 @@ FAttoServerInstance::~FAttoServerInstance()
 	Protocols = nullptr;
 }
 
+void FAttoServerInstance::OnLogout(const uint64 UserId)
+{
+	Sessions.Remove(UserId);
+}
+
 bool FAttoServerInstance::Tick(float DeltaSeconds)
 {
+	Matchmaker.Tick();
 	lws_service(Context, 0);
 	return true;
 }

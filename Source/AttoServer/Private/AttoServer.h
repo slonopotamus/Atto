@@ -6,7 +6,27 @@
 class FAttoConnection;
 class FAttoServer;
 
-class FAttoServerInstance final : FNoncopyable
+struct FAttoMatchmakerMember
+{
+	FTimespan Timeout;
+	int32 UserCount = 0;
+	// TODO: Do we actually need to wrap this in a TSharedRef?
+	TSharedRef<TPromise<const FAttoSessionInfo*>> Promise;
+};
+
+class FAttoMatchmaker final : public FNoncopyable
+{
+public:
+	TMap<FGuid, FAttoMatchmakerMember> Queue;
+
+	bool Cancel(FGuid& Token);
+
+	TFuture<const FAttoSessionInfo*> Enqueue(FGuid& Token, int32 UserCount, const FTimespan& Timeout);
+
+	void Tick();
+};
+
+class FAttoServerInstance final : public FNoncopyable
 {
 	typedef FAttoServerInstance ThisClass;
 
@@ -31,7 +51,11 @@ public:
 
 	TMap<uint64, FAttoSessionInfo> Sessions;
 
+	FAttoMatchmaker Matchmaker;
+
 	~FAttoServerInstance();
+
+	void OnLogout(uint64 UserId);
 };
 
 class FAttoServer final

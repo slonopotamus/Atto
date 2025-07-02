@@ -112,11 +112,32 @@ struct ATTOCOMMON_API FAttoFindSessionsParam
 	}
 };
 
+struct ATTOCOMMON_API FAttoSessionAddress
+{
+	TArray<uint8> Host;
+	int32 Port = 0;
+
+	FAttoSessionAddress() = default;
+
+	explicit FAttoSessionAddress(const FInternetAddr& Addr)
+	    : Host{Addr.GetRawIp()}
+	    , Port{Addr.GetPort()}
+	{}
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoSessionAddress& Message)
+	{
+		Ar << Message.Host;
+		Ar << Message.Port;
+		return Ar;
+	}
+
+	TSharedRef<FInternetAddr> ToInternetAddr() const;
+};
+
 struct ATTOCOMMON_API FAttoSessionInfo
 {
 	uint64 SessionId = 0;
-	TArray<uint8> HostAddress;
-	int32 Port = 0;
+	FAttoSessionAddress HostAddress;
 	int32 BuildUniqueId = 0;
 	FAttoSessionUpdatableInfo UpdatableInfo;
 	// TODO: We could skip sending this when creating session and instead determine whether connection is from dedicated server during Login
@@ -149,7 +170,6 @@ struct ATTOCOMMON_API FAttoSessionInfo
 	{
 		Ar << Message.SessionId;
 		Ar << Message.HostAddress;
-		Ar << Message.Port;
 		Ar << Message.BuildUniqueId;
 		Ar << Message.UpdatableInfo;
 		Ar << Message.bIsDedicated;
@@ -261,7 +281,7 @@ struct ATTOCOMMON_API FAttoFindSessionsRequest
 	{
 		int32 RequestId = 0;
 
-		TArray<FAttoSessionInfoEx> Sessions;
+		TArray<FAttoSessionInfo> Sessions;
 
 		friend FArchive& operator<<(FArchive& Ar, Result& Message)
 		{
@@ -295,6 +315,53 @@ struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
 	};
 };
 
+struct ATTOCOMMON_API FAttoStartMatchmakingRequest
+{
+	TArray<uint64> Users;
+	TMap<FName, FAttoFindSessionsParam> Params;
+	FTimespan Timeout;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoStartMatchmakingRequest& Message)
+	{
+		Ar << Message.Users;
+		Ar << Message.Params;
+		Ar << Message.Timeout;
+		return Ar;
+	}
+
+	struct FTimeout
+	{
+		friend FArchive& operator<<(FArchive& Ar, FTimeout& Message)
+		{
+			return Ar;
+		}
+	};
+
+	using Result = TVariant<FAttoSessionInfo, FTimeout, FString>;
+};
+
+struct ATTOCOMMON_API FAttoCancelMatchmakingRequest
+{
+	uint64 UserId = 0;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoCancelMatchmakingRequest& Message)
+	{
+		Ar << Message.UserId;
+		return Ar;
+	}
+
+	struct ATTOCOMMON_API Result
+	{
+		bool bSuccess = false;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar << Message.bSuccess;
+			return Ar;
+		}
+	};
+};
+
 struct ATTOCOMMON_API FAttoDummyServerPush
 {
 	// Workaround to fix clang-format 19 messing up everything
@@ -313,7 +380,9 @@ using FAttoClientRequestProtocol = TVariant<
     FAttoUpdateSessionRequest,
     FAttoDestroySessionRequest,
     FAttoFindSessionsRequest,
-    FAttoQueryServerUtcTimeRequest>;
+    FAttoQueryServerUtcTimeRequest,
+    FAttoStartMatchmakingRequest,
+    FAttoCancelMatchmakingRequest>;
 
 using FAttoServerResponseProtocol = TVariant<
     FAttoLoginRequest::Result,
@@ -322,7 +391,9 @@ using FAttoServerResponseProtocol = TVariant<
     FAttoUpdateSessionRequest::Result,
     FAttoDestroySessionRequest::Result,
     FAttoFindSessionsRequest::Result,
-    FAttoQueryServerUtcTimeRequest::Result>;
+    FAttoQueryServerUtcTimeRequest::Result,
+    FAttoStartMatchmakingRequest::Result,
+    FAttoCancelMatchmakingRequest::Result>;
 
 using FAttoServerPushProtocol = TVariant<
     FAttoDummyServerPush>;
