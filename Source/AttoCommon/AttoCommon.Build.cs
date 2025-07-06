@@ -11,6 +11,7 @@ public class AttoCommon : ModuleRules
 			"Engine",
 			"OnlineSubsystem",
 			"OnlineSubsystemUtils",
+			"Sockets"
 		});
 	}
 }

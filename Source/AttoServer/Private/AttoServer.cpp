@@ -68,7 +68,6 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 
 FAttoServerInstance::FAttoServerInstance(const FAttoServer& Config)
     : Protocols{new lws_protocols[2]}
-    , MaxFindSessionsResults{Config.MaxFindSessionsResults}
 {
 	Protocols[0] = {
 	    .name = Atto::Protocol,
@@ -106,6 +105,7 @@ FAttoServerInstance::~FAttoServerInstance()
 
 bool FAttoServerInstance::Tick(float DeltaSeconds)
 {
+	Matchmaker.Tick(DeltaSeconds);
 	lws_service(Context, 0);
 	return true;
 }

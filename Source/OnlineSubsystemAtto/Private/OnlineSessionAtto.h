@@ -4,6 +4,7 @@
 #include "OnlineSessionSettings.h"
 
 class FOnlineSubsystemAtto;
+struct FAttoSessionInfoEx;
 
 class FOnlineSessionAtto final : public IOnlineSession
 {
@@ -13,12 +14,8 @@ class FOnlineSessionAtto final : public IOnlineSession
 
 	TMap<FName, FNamedOnlineSession> Sessions;
 
-	struct FAttoSessionSearchState
-	{
-		TSharedRef<FOnlineSessionSearch> SearchSettings;
-	};
-
-	TOptional<FAttoSessionSearchState> CurrentSessionSearch;
+	TSharedPtr<FOnlineSessionSearch> CurrentSessionSearch;
+	TSharedPtr<FOnlineSessionSearch> CurrentMatchmaking;
 
 	static TSharedRef<FInternetAddr> DetermineSessionPublicAddress();
 	int32 DetermineSessionPublicPort() const;

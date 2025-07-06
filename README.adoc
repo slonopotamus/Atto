@@ -27,8 +27,9 @@ Tested against Unreal Engine 5.5.
 [[oss]]
 == Supported Online Subsystem interfaces
 
-* https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-identity-interface-in-unreal-engine[Identity] (login, logout)
-* https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-session-interface-in-unreal-engine[Sessions] (create, start, end, destroy, find)
+* https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-identity-interface-in-unreal-engine[Identity].
+Authentication is just a stub, it accepts any login/password pair if they are equal.
+* https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-session-interface-in-unreal-engine[Sessions]: create, start, end, destroy, find, start/cancel matchmaking
 * Time service
 
 == Futher development ideas

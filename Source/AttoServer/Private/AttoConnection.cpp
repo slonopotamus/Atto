@@ -12,8 +12,10 @@ FAttoConnection::~FAttoConnection()
 {
 	for (const auto& UserId : Users)
 	{
-		Server.Sessions.Remove(UserId);
+		Server.Matchmaker.RemoveSession(UserId);
 	}
+
+	Server.Matchmaker.Cancel(MatchmakingToken);
 }
 
 void FAttoConnection::ReceiveInternal(const void* Data, const size_t Size)
@@ -152,7 +154,8 @@ TFuture<FAttoLogoutRequest::Result> FAttoConnection::operator()(const FAttoLogou
 
 	if (bSuccess)
 	{
-		Server.Sessions.Remove(Message.UserId);
+		Server.Matchmaker.RemoveSession(Message.UserId);
+		Server.Matchmaker.Cancel(MatchmakingToken);
 	}
 
 	return MakeFulfilledPromise<FAttoLogoutRequest::Result>(bSuccess).GetFuture();
@@ -162,11 +165,9 @@ TFuture<FAttoCreateSessionRequest::Result> FAttoConnection::operator()(const FAt
 {
 	bool bSuccess = false;
 
-	if (Users.Contains(Message.SessionInfo.OwningUserId))
+	if (Users.Contains(Message.OwningUserId))
 	{
-		// TODO: Check if entry already exists? For any of users? But what if they login later?
-		Server.Sessions.Add(Message.SessionInfo.OwningUserId, Message.SessionInfo.SessionInfo);
-		bSuccess = true;
+		bSuccess = Server.Matchmaker.AddSession(Message.OwningUserId, Message.SessionInfo);
 	}
 
 	return MakeFulfilledPromise<FAttoCreateSessionRequest::Result>(bSuccess).GetFuture();
@@ -178,11 +179,7 @@ TFuture<FAttoUpdateSessionRequest::Result> FAttoConnection::operator()(const FAt
 
 	if (Users.Contains(Message.OwningUserId))
 	{
-		if (auto* Session = Server.Sessions.Find(Message.OwningUserId))
-		{
-			Session->UpdatableInfo = Message.SessionInfo;
-			bSuccess = true;
-		}
+		bSuccess = Server.Matchmaker.UpdateSession(Message.OwningUserId, Message.SessionInfo);
 	}
 
 	return MakeFulfilledPromise<FAttoUpdateSessionRequest::Result>(bSuccess).GetFuture();
@@ -194,7 +191,7 @@ TFuture<FAttoDestroySessionRequest::Result> FAttoConnection::operator()(const FA
 
 	if (Users.Contains(Message.OwningUserId))
 	{
-		bSuccess = Server.Sessions.Remove(Message.OwningUserId) > 0;
+		bSuccess = Server.Matchmaker.RemoveSession(Message.OwningUserId);
 	}
 
 	return MakeFulfilledPromise<FAttoDestroySessionRequest::Result>(bSuccess).GetFuture();
@@ -202,31 +199,11 @@ TFuture<FAttoDestroySessionRequest::Result> FAttoConnection::operator()(const FA
 
 TFuture<FAttoFindSessionsRequest::Result> FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 {
-	TArray<FAttoSessionInfoEx> Sessions;
+	TArray<FAttoSessionInfo> Sessions;
 
 	if (!Users.IsEmpty())
 	{
-		const auto MaxResults = FMath::Min(Message.MaxResults, Server.MaxFindSessionsResults);
-
-		for (const auto& [OwningUserId, Session] : Server.Sessions)
-		{
-			if (Sessions.Num() >= MaxResults)
-			{
-				break;
-			}
-
-			if (!Session.IsJoinable())
-			{
-				continue;
-			}
-
-			if (!Session.Matches(Message.Params))
-			{
-				continue;
-			}
-
-			Sessions.Emplace(OwningUserId, Session);
-		}
+		Server.Matchmaker.FindSessions(Users.Num(), Message, Sessions);
 	}
 
 	return MakeFulfilledPromise<FAttoFindSessionsRequest::Result>(Message.RequestId, MoveTemp(Sessions)).GetFuture();
@@ -235,4 +212,43 @@ TFuture<FAttoFindSessionsRequest::Result> FAttoConnection::operator()(const FAtt
 TFuture<FAttoQueryServerUtcTimeRequest::Result> FAttoConnection::operator()(const FAttoQueryServerUtcTimeRequest& Message)
 {
 	return MakeFulfilledPromise<FAttoQueryServerUtcTimeRequest::Result>(FDateTime::UtcNow()).GetFuture();
+}
+
+TFuture<FAttoStartMatchmakingRequest::Result> FAttoConnection::operator()(const FAttoStartMatchmakingRequest& Message)
+{
+	if (Users.Num() != Message.Users.Num())
+	{
+		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, FString::Printf(TEXT("All connected users must enter matchmaking"))).GetFuture();
+	}
+
+	for (const auto& User : Message.Users)
+	{
+		if (!Users.Contains(User))
+		{
+			return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, FString::Printf(TEXT("User %016llx is not logged in"), User)).GetFuture();
+		}
+	}
+
+	if (MatchmakingToken.IsValid())
+	{
+		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, TEXT("Already in matchmaking queue")).GetFuture();
+	}
+
+	return Server.Matchmaker.Enqueue(MatchmakingToken, Users.Num(), Message)
+	    .Next([=, this](const auto&& Response) {
+		    MatchmakingToken.Invalidate();
+		    return Response;
+	    });
+}
+
+TFuture<FAttoCancelMatchmakingRequest::Result> FAttoConnection::operator()(const FAttoCancelMatchmakingRequest& Message)
+{
+	bool bSuccess = false;
+
+	if (Users.Contains(Message.UserId))
+	{
+		bSuccess = Server.Matchmaker.Cancel(MatchmakingToken);
+	}
+
+	return MakeFulfilledPromise<FAttoCancelMatchmakingRequest::Result>(bSuccess).GetFuture();
 }

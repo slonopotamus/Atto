@@ -36,14 +36,11 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 			{
 				if (typename T::Result* Result = Response.TryGet<typename T::Result>(); ensure(Result))
 				{
-					Promise->SetValue(UE::Online::TOnlineResult<T>{MoveTemp(*Result)});
+					Promise->EmplaceValue(MoveTemp(*Result));
 				}
 				else
 				{
-					Promise->SetValue(
-					    UE::Online::TOnlineResult<T>{
-					        UE::Online::FOnlineError{
-					            UE::Online::Errors::ErrorCode::Common::CantParse}});
+					Promise->EmplaceValue(UE::Online::FOnlineError{UE::Online::Errors::ErrorCode::Common::CantParse});
 				}
 			}
 
@@ -54,10 +51,7 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 		{
 			if (Promise)
 			{
-				Promise->SetValue(
-				    UE::Online::TOnlineResult<T>{
-				        UE::Online::FOnlineError{
-				            UE::Online::Errors::ErrorCode::Common::RequestFailure}});
+				Promise->EmplaceValue(UE::Online::FOnlineError{UE::Online::Errors::ErrorCode::Common::RequestFailure});
 			}
 
 			Promise = nullptr;
@@ -67,10 +61,7 @@ class ATTOCLIENT_API FAttoClient final : FNoncopyable
 		{
 			if (Promise)
 			{
-				Promise->SetValue(
-				    UE::Online::TOnlineResult<T>{
-				        UE::Online::FOnlineError{
-				            UE::Online::Errors::ErrorCode::Common::Cancelled}});
+				Promise->EmplaceValue(UE::Online::FOnlineError{UE::Online::Errors::ErrorCode::Common::Cancelled});
 			}
 
 			Promise = nullptr;
@@ -121,6 +112,4 @@ public:
 		Send(RequestId, FAttoClientRequestProtocol{TInPlaceType<T>(), Forward<ArgTypes>(Args)...});
 		return Future;
 	}
-
-	TFuture<UE::Online::TOnlineResult<FAttoFindSessionsRequest>> FindSessionsAsync(const FOnlineSessionSearch& Search);
 };

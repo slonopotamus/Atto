@@ -1,6 +1,7 @@
 #include "AttoGameSession.h"
 #include "AttoCommon.h"
 #include "Interfaces/OnlineSessionInterface.h"
+#include "Online/OnlineSessionNames.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystemUtils.h"
 
@@ -8,12 +9,11 @@ FOnlineSessionSettings AAttoGameSession::BuildSessionSettings() const
 {
 	FOnlineSessionSettings Settings;
 
-	Settings.bIsDedicated = GetNetMode() == NM_DedicatedServer;
 	Settings.NumPublicConnections = MaxPlayers;
 	Settings.bShouldAdvertise = true;
-	Settings.bUseLobbiesIfAvailable = true;
-	Settings.bUsesPresence = !Settings.bIsDedicated;
-	Settings.bAllowJoinViaPresence = true;
+	Settings.bIsDedicated = GetNetMode() == NM_DedicatedServer;
+
+	Settings.Set(SETTING_MAXSPECTATORS, MaxSpectators);
 
 	return Settings;
 }
