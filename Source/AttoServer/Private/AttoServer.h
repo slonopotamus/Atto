@@ -1,12 +1,12 @@
 #pragma once
 
 #include "AttoCommon.h"
-#include "AttoProtocol.h"
+#include "AttoMatchmaker.h"
 
 class FAttoConnection;
 class FAttoServer;
 
-class FAttoServerInstance final : FNoncopyable
+class FAttoServerInstance final : public FNoncopyable
 {
 	typedef FAttoServerInstance ThisClass;
 
@@ -25,11 +25,9 @@ class FAttoServerInstance final : FNoncopyable
 	bool Tick(float DeltaSeconds);
 
 public:
-	const int32 MaxFindSessionsResults;
-
 	TSet<FAttoConnection*> Connections;
 
-	TMap<uint64, FAttoSessionInfo> Sessions;
+	FAttoMatchmaker Matchmaker;
 
 	~FAttoServerInstance();
 };
@@ -41,7 +39,6 @@ class FAttoServer final
 	TOptional<FString> BindAddress;
 	uint32 ReceiveBufferSize = 65536;
 	uint32 ListenPort = Atto::DefaultPort;
-	int32 MaxFindSessionsResults = 100;
 
 public:
 	[[nodiscard]] FAttoServer& WithBindAddress(FString InBindAddress) &&

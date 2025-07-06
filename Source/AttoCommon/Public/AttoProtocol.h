@@ -45,12 +45,18 @@ struct ATTOCOMMON_API FAttoLogoutRequest
 	};
 };
 
+using FAttoSessionSettingValue = TVariant<bool, int32, uint32, int64, uint64, double, FString, float, TArray<uint8>>;
+
 struct ATTOCOMMON_API FAttoSessionUpdatableInfo
 {
 	int32 NumOpenPublicConnections = 0;
+
 	int32 NumPublicConnections = 0;
+
 	EOnlineSessionState::Type State;
+
 	bool bAllowJoinInProgress = false;
+
 	bool bShouldAdvertise = false;
 
 	FAttoSessionUpdatableInfo() = default;
@@ -62,19 +68,6 @@ struct ATTOCOMMON_API FAttoSessionUpdatableInfo
 	    , bAllowJoinInProgress{OnlineSession.SessionSettings.bAllowJoinInProgress}
 	    , bShouldAdvertise{OnlineSession.SessionSettings.bShouldAdvertise}
 	{}
-
-	void CopyTo(FOnlineSession& OnlineSession, EOnlineSessionState::Type* StatePtr) const
-	{
-		OnlineSession.NumOpenPublicConnections = NumOpenPublicConnections;
-		OnlineSession.SessionSettings.NumPublicConnections = NumPublicConnections;
-		OnlineSession.SessionSettings.bAllowJoinInProgress = bAllowJoinInProgress;
-		OnlineSession.SessionSettings.bShouldAdvertise = bShouldAdvertise;
-
-		if (StatePtr)
-		{
-			*StatePtr = State;
-		}
-	}
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoSessionUpdatableInfo& Message)
 	{
@@ -90,14 +83,20 @@ struct ATTOCOMMON_API FAttoSessionUpdatableInfo
 
 		return Ar;
 	}
-};
 
-using FAttoFindSessionsParamValue = TVariant<bool, int32, uint32, int64, uint64, double, FString, float, TArray<uint8>>;
+	void CopyTo(FOnlineSession& OnlineSession) const
+	{
+		OnlineSession.NumOpenPublicConnections = NumOpenPublicConnections;
+		OnlineSession.SessionSettings.NumPublicConnections = NumPublicConnections;
+		OnlineSession.SessionSettings.bAllowJoinInProgress = bAllowJoinInProgress;
+		OnlineSession.SessionSettings.bShouldAdvertise = bShouldAdvertise;
+	}
+};
 
 struct ATTOCOMMON_API FAttoFindSessionsParam
 {
 	EOnlineComparisonOp::Type ComparisonOp = EOnlineComparisonOp::Equals;
-	FAttoFindSessionsParamValue Value{TInPlaceType<bool>{}, false};
+	FAttoSessionSettingValue Value{TInPlaceType<bool>{}, false};
 	int32 ID = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsParam& Message)
@@ -112,45 +111,67 @@ struct ATTOCOMMON_API FAttoFindSessionsParam
 	}
 };
 
+struct ATTOCOMMON_API FAttoSessionAddress
+{
+	TArray<uint8> Host;
+	int32 Port = 0;
+
+	FAttoSessionAddress() = default;
+
+	explicit FAttoSessionAddress(const FInternetAddr& Addr)
+	    : Host{Addr.GetRawIp()}
+	    , Port{Addr.GetPort()}
+	{}
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoSessionAddress& Message)
+	{
+		Ar << Message.Host;
+		Ar << Message.Port;
+		return Ar;
+	}
+
+	TSharedRef<FInternetAddr> ToInternetAddr() const;
+};
+
 struct ATTOCOMMON_API FAttoSessionInfo
 {
 	uint64 SessionId = 0;
-	TArray<uint8> HostAddress;
-	int32 Port = 0;
+
+	FAttoSessionAddress HostAddress;
+
 	int32 BuildUniqueId = 0;
+
+	TMap<FString, FAttoSessionSettingValue> Settings;
+
 	FAttoSessionUpdatableInfo UpdatableInfo;
+
 	// TODO: We could skip sending this when creating session and instead determine whether connection is from dedicated server during Login
 	bool bIsDedicated = false;
+
 	bool bAntiCheatProtected = false;
 
-	bool IsJoinable() const
+	void CopyTo(FOnlineSession& OnlineSession) const
 	{
-		if (!UpdatableInfo.bShouldAdvertise)
+		OnlineSession.SessionSettings.BuildUniqueId = BuildUniqueId;
+		for (const auto& [SettingName, SettingValue] : Settings)
 		{
-			return false;
+			Visit(
+			    [&](const auto& Value) {
+				    OnlineSession.SessionSettings.Set(FName{SettingName}, Value);
+			    },
+			    SettingValue);
 		}
-
-		if (UpdatableInfo.NumOpenPublicConnections <= 0)
-		{
-			return false;
-		}
-
-		return UpdatableInfo.bAllowJoinInProgress || UpdatableInfo.State != EOnlineSessionState::InProgress;
+		UpdatableInfo.CopyTo(OnlineSession);
+		OnlineSession.SessionSettings.bIsDedicated = bIsDedicated;
+		OnlineSession.SessionSettings.bAntiCheatProtected = bAntiCheatProtected;
 	}
-
-	bool IsEmpty() const
-	{
-		return UpdatableInfo.NumOpenPublicConnections >= UpdatableInfo.NumPublicConnections;
-	}
-
-	bool Matches(const TMap<FName, FAttoFindSessionsParam>& Params) const;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoSessionInfo& Message)
 	{
 		Ar << Message.SessionId;
 		Ar << Message.HostAddress;
-		Ar << Message.Port;
 		Ar << Message.BuildUniqueId;
+		Ar << Message.Settings;
 		Ar << Message.UpdatableInfo;
 		Ar << Message.bIsDedicated;
 		Ar << Message.bAntiCheatProtected;
@@ -158,25 +179,15 @@ struct ATTOCOMMON_API FAttoSessionInfo
 	}
 };
 
-struct ATTOCOMMON_API FAttoSessionInfoEx
-{
-	uint64 OwningUserId = 0;
-	FAttoSessionInfo SessionInfo;
-
-	friend FArchive& operator<<(FArchive& Ar, FAttoSessionInfoEx& Message)
-	{
-		Ar << Message.OwningUserId;
-		Ar << Message.SessionInfo;
-		return Ar;
-	}
-};
-
 struct ATTOCOMMON_API FAttoCreateSessionRequest
 {
-	FAttoSessionInfoEx SessionInfo;
+	uint64 OwningUserId = 0;
+
+	FAttoSessionInfo SessionInfo;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoCreateSessionRequest& Message)
 	{
+		Ar << Message.OwningUserId;
 		Ar << Message.SessionInfo;
 		return Ar;
 	}
@@ -243,7 +254,7 @@ struct ATTOCOMMON_API FAttoDestroySessionRequest
 
 struct ATTOCOMMON_API FAttoFindSessionsRequest
 {
-	TMap<FName, FAttoFindSessionsParam> Params;
+	TMap<FString, FAttoFindSessionsParam> Params;
 
 	int32 RequestId = 0;
 
@@ -261,7 +272,7 @@ struct ATTOCOMMON_API FAttoFindSessionsRequest
 	{
 		int32 RequestId = 0;
 
-		TArray<FAttoSessionInfoEx> Sessions;
+		TArray<FAttoSessionInfo> Sessions;
 
 		friend FArchive& operator<<(FArchive& Ar, Result& Message)
 		{
@@ -295,6 +306,61 @@ struct ATTOCOMMON_API FAttoQueryServerUtcTimeRequest
 	};
 };
 
+struct ATTOCOMMON_API FAttoStartMatchmakingRequest
+{
+	TArray<uint64> Users;
+	TMap<FString, FAttoFindSessionsParam> Params;
+	FTimespan Timeout;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoStartMatchmakingRequest& Message)
+	{
+		Ar << Message.Users;
+		Ar << Message.Params;
+		Ar << Message.Timeout;
+		return Ar;
+	}
+
+	struct FTimeout
+	{
+		friend FArchive& operator<<(FArchive& Ar, FTimeout& Message)
+		{
+			return Ar;
+		}
+	};
+
+	struct FCanceled
+	{
+		friend FArchive& operator<<(FArchive& Ar, FCanceled& Message)
+		{
+			return Ar;
+		}
+	};
+
+	using Result = TVariant<FAttoSessionInfo, FTimeout, FCanceled, FString>;
+};
+
+struct ATTOCOMMON_API FAttoCancelMatchmakingRequest
+{
+	uint64 UserId = 0;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoCancelMatchmakingRequest& Message)
+	{
+		Ar << Message.UserId;
+		return Ar;
+	}
+
+	struct ATTOCOMMON_API Result
+	{
+		bool bSuccess = false;
+
+		friend FArchive& operator<<(FArchive& Ar, Result& Message)
+		{
+			Ar << Message.bSuccess;
+			return Ar;
+		}
+	};
+};
+
 struct ATTOCOMMON_API FAttoDummyServerPush
 {
 	// Workaround to fix clang-format 19 messing up everything
@@ -313,7 +379,9 @@ using FAttoClientRequestProtocol = TVariant<
     FAttoUpdateSessionRequest,
     FAttoDestroySessionRequest,
     FAttoFindSessionsRequest,
-    FAttoQueryServerUtcTimeRequest>;
+    FAttoQueryServerUtcTimeRequest,
+    FAttoStartMatchmakingRequest,
+    FAttoCancelMatchmakingRequest>;
 
 using FAttoServerResponseProtocol = TVariant<
     FAttoLoginRequest::Result,
@@ -322,7 +390,9 @@ using FAttoServerResponseProtocol = TVariant<
     FAttoUpdateSessionRequest::Result,
     FAttoDestroySessionRequest::Result,
     FAttoFindSessionsRequest::Result,
-    FAttoQueryServerUtcTimeRequest::Result>;
+    FAttoQueryServerUtcTimeRequest::Result,
+    FAttoStartMatchmakingRequest::Result,
+    FAttoCancelMatchmakingRequest::Result>;
 
 using FAttoServerPushProtocol = TVariant<
     FAttoDummyServerPush>;
