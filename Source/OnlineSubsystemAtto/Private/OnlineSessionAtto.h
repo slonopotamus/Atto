@@ -4,7 +4,6 @@
 #include "OnlineSessionSettings.h"
 
 class FOnlineSubsystemAtto;
-struct FAttoSessionInfoEx;
 
 class FOnlineSessionAtto final : public IOnlineSession
 {
