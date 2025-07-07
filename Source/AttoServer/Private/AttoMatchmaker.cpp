@@ -296,6 +296,7 @@ bool FAttoMatchmaker::DestroySession(const uint64 OwningUserId)
 
 void FAttoMatchmaker::Tick(const float DeltaSeconds)
 {
+	// TODO: Store sessions with cooldown in a separate collection
 	for (auto& [_, Session] : Sessions)
 	{
 		if (Session.MatchmakerCooldown > FTimespan::Zero())
@@ -304,92 +305,97 @@ void FAttoMatchmaker::Tick(const float DeltaSeconds)
 		}
 	}
 
-	// Create matches
-	for (auto& [_, Session] : Sessions)
+	// Build matches
+	if (!QueuesByPlayersNum.IsEmpty())
 	{
-		if (!Session.IsJoinable())
+		for (auto& [_, Session] : Sessions)
 		{
-			// Session cannot be joined by anyone
-			// TODO: Maybe we want to store joinable and non-joinable sessions in separate collections?
-			continue;
-		}
-
-		int32 RemainingCapacity = Session.SessionInfo.UpdatableInfo.NumOpenPublicConnections;
-
-		// Match candidates
-		TArray<decltype(QueuesByPlayersNum)::ValueType::TIterator> Match;
-
-		for (auto& [NumPlayers, Queue] : QueuesByPlayersNum)
-		{
-			if (RemainingCapacity < NumPlayers)
+			// TODO: Store joinable sessions in a separate collection
+			if (!Session.IsJoinable())
 			{
-				// No member of current size will fit, move on to smaller sizes
+				// Session cannot be joined by anyone
+				// TODO: Maybe we want to store joinable and non-joinable sessions in separate collections?
 				continue;
 			}
 
-			for (auto MemberIt = Queue.CreateIterator(); MemberIt; ++MemberIt)
+			int32 RemainingCapacity = Session.SessionInfo.UpdatableInfo.NumOpenPublicConnections;
+
+			// Reverse order so we first try to matchmake bigger teams
+			for (auto& [NumPlayers, Queue] : ReverseIterate(QueuesByPlayersNum))
 			{
-				if (!Session.Matches(MemberIt->Params))
+				if (RemainingCapacity < NumPlayers)
 				{
+					// No member of current size will fit, move on to smaller sizes
 					continue;
 				}
 
-				Match.Add(MemberIt);
-				if ((RemainingCapacity -= NumPlayers) < NumPlayers)
+				for (auto MemberIt = Queue.CreateIterator(); MemberIt; ++MemberIt)
 				{
-					// No member of current size will fit, move on to smaller sizes
-					break;
+					if (!Session.Matches(MemberIt->Params))
+					{
+						continue;
+					}
+
+					Match.Add(MemberIt);
+					if ((RemainingCapacity -= NumPlayers) < NumPlayers)
+					{
+						// No member of current size will fit, move on to smaller sizes
+						break;
+					}
 				}
 			}
-		}
 
-		if (RemainingCapacity > 0)
-		{
-			// TODO: Add logic for partial match filling
-			continue;
-		}
+			if (Match.IsEmpty())
+			{
+				continue;
+			}
 
-		if (!Match.IsEmpty())
-		{
+			if (RemainingCapacity > 0)
+			{
+				Match.Empty();
+				// TODO: Add logic for partial matches
+				continue;
+			}
+
 			// Reverse so that indexes do not invalidate when we remove members from queue
-			Algo::Reverse(Match);
-
-			for (auto Member : Match)
+			for (auto Member : ReverseIterate(Match))
 			{
 				// Send session info
 				Member->Promise->EmplaceValue(TInPlaceType<FAttoSessionInfo>{}, Session.SessionInfo);
 				Member.RemoveCurrent();
 			}
 
+			Match.Empty();
+
 			// Cooldown the session so players have time to connect to it
 			Session.MatchmakerCooldown = MatchmakerCooldown;
 		}
-	}
 
-	// Expire timeout and cleanup queues
-	for (auto QueueIt = QueuesByPlayersNum.CreateIterator(); QueueIt; ++QueueIt)
-	{
-		for (auto MemberIt = QueueIt.Value().CreateIterator(); MemberIt; ++MemberIt)
+		// Expire timeout and cleanup queues
+		for (auto QueueIt = QueuesByPlayersNum.CreateIterator(); QueueIt; ++QueueIt)
 		{
-			if (MemberIt->Timeout <= FTimespan::Zero())
+			for (auto MemberIt = QueueIt.Value().CreateIterator(); MemberIt; ++MemberIt)
 			{
-				// Infinite timeout
-				continue;
+				if (MemberIt->Timeout <= FTimespan::Zero())
+				{
+					// Infinite timeout
+					continue;
+				}
+
+				if ((MemberIt->Timeout -= FTimespan::FromSeconds(DeltaSeconds)) >= FTimespan::Zero())
+				{
+					// Timeout hasn't expired yet
+					continue;
+				}
+
+				MemberIt->Promise->EmplaceValue(TInPlaceType<FAttoStartMatchmakingRequest::FTimeout>{}, FAttoStartMatchmakingRequest::FTimeout{});
+				MemberIt.RemoveCurrent();
 			}
 
-			if ((MemberIt->Timeout -= FTimespan::FromSeconds(DeltaSeconds)) >= FTimespan::Zero())
+			if (QueueIt.Value().IsEmpty())
 			{
-				// Timeout hasn't expired yet
-				continue;
+				QueueIt.RemoveCurrent();
 			}
-
-			MemberIt->Promise->EmplaceValue(TInPlaceType<FAttoStartMatchmakingRequest::FTimeout>{}, FAttoStartMatchmakingRequest::FTimeout{});
-			MemberIt.RemoveCurrent();
-		}
-
-		if (QueueIt.Value().IsEmpty())
-		{
-			QueueIt.RemoveCurrent();
 		}
 	}
 }
