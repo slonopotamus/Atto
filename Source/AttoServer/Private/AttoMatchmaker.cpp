@@ -348,13 +348,36 @@ void FAttoMatchmaker::Tick(const float DeltaSeconds)
 			if (Match.IsEmpty())
 			{
 				continue;
+
+			// Calculate if this partial match meets our criteria
+			const int32 TotalCapacity = Session.SessionInfo.UpdatableInfo.NumPublicConnections;
+			const int32 MatchedPlayers = TotalCapacity - RemainingCapacity;
+			const float CapacityUtilization = static_cast<float>(MatchedPlayers) / TotalCapacity;
+			
+			// Accept partial matches if they meet minimum thresholds
+			const bool bAcceptPartialMatch = MatchedPlayers >= MinPlayersForPartialMatch && 
+											 CapacityUtilization >= PartialMatchThreshold;
 			}
+
+			// Calculate if this partial match meets our criteria
+			const int32 TotalCapacity = Session.SessionInfo.UpdatableInfo.NumPublicConnections;
+			const int32 MatchedPlayers = TotalCapacity - RemainingCapacity;
+			const float CapacityUtilization = static_cast<float>(MatchedPlayers) / TotalCapacity;
+			
+			// Accept partial matches if they meet minimum thresholds
+			const bool bAcceptPartialMatch = MatchedPlayers >= MinPlayersForPartialMatch && 
+											 CapacityUtilization >= PartialMatchThreshold;
 
 			if (RemainingCapacity > 0)
 			{
-				Match.Empty();
-				// TODO: Add logic for partial matches
-				continue;
+				if (!bAcceptPartialMatch)
+				{
+					Match.Empty();
+					continue;
+				}
+				// Accept this partial match
+			}
+			{
 			}
 
 			// Reverse so that indexes do not invalidate when we remove members from queue
@@ -365,7 +388,6 @@ void FAttoMatchmaker::Tick(const float DeltaSeconds)
 				Member.RemoveCurrent();
 			}
 
-			Match.Empty();
 
 			// Cooldown the session so players have time to connect to it
 			Session.MatchmakerCooldown = MatchmakerCooldown;
@@ -379,7 +401,6 @@ void FAttoMatchmaker::Tick(const float DeltaSeconds)
 				if (MemberIt->Timeout <= FTimespan::Zero())
 				{
 					// Infinite timeout
-					continue;
 				}
 
 				if ((MemberIt->Timeout -= FTimespan::FromSeconds(DeltaSeconds)) >= FTimespan::Zero())

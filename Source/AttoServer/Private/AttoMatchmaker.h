@@ -52,7 +52,19 @@ class FAttoMatchmaker final : public FNoncopyable
 	bool Remove(const FGuid& Token);
 
 public:
+	/** Minimum percentage of session capacity that must be filled to accept a partial match (0.0 to 1.0) */
+	float PartialMatchThreshold = 0.5f;
+	
+	/** Minimum number of players required for any match, regardless of session capacity */
+	int32 MinPlayersForPartialMatch = 2;
+
 	~FAttoMatchmaker();
+
+	/** Minimum percentage of session capacity that must be filled to accept a partial match (0.0 to 1.0) */
+	float PartialMatchThreshold = 0.5f;
+	
+	/** Minimum number of players required for any match, regardless of session capacity */
+	int32 MinPlayersForPartialMatch = 2;
 
 	bool Cancel(FGuid& Token);
 
