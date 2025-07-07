@@ -14,7 +14,6 @@ class FOnlineSessionAtto final : public IOnlineSession
 	TMap<FName, FNamedOnlineSession> Sessions;
 
 	TSharedPtr<FOnlineSessionSearch> CurrentSessionSearch;
-	TSharedPtr<FOnlineSessionSearch> CurrentMatchmaking;
 
 	static TSharedRef<FInternetAddr> DetermineSessionPublicAddress();
 	int32 DetermineSessionPublicPort() const;

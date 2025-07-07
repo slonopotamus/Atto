@@ -350,7 +350,7 @@ bool FOnlineSessionAtto::IsPlayerInSession(const FName SessionName, const FUniqu
 
 bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueNetId>>& LocalPlayers, const FName SessionName, const FOnlineSessionSettings& NewSessionSettings, TSharedRef<FOnlineSessionSearch>& SearchSettings)
 {
-	if (CurrentMatchmaking.IsValid())
+	if (CurrentSessionSearch.IsValid())
 	{
 		UE_LOG_ONLINE_SESSION(Warning, TEXT("Ignoring matchmaking request while one is pending"));
 		return false;
@@ -383,19 +383,19 @@ bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueN
 		}
 	}
 
-	CurrentMatchmaking = SearchSettings;
-	CurrentMatchmaking->PlatformHash = FMath::Rand32();
-	CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::InProgress;
+	CurrentSessionSearch = SearchSettings;
+	CurrentSessionSearch->PlatformHash = FMath::Rand32();
+	CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::InProgress;
 
 	Subsystem.AttoClient
 	    ->Send<FAttoStartMatchmakingRequest>(UserIds, ConvertSearchParams(SearchSettings->QuerySettings.SearchParams), FTimespan::FromSeconds(SearchSettings->TimeoutInSeconds))
 	    .Next([=, this](auto&& Response) {
 		    if (!Response.IsOk())
 		    {
-			    if (CurrentMatchmaking)
+			    if (CurrentSessionSearch)
 			    {
-				    CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::Failed;
-				    CurrentMatchmaking.Reset();
+				    CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::Failed;
+				    CurrentSessionSearch.Reset();
 			    }
 			    TriggerOnMatchmakingCompleteDelegates(SessionName, false);
 			    return;
@@ -411,10 +411,10 @@ bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueN
 			    Session->SessionInfo = MakeShared<FOnlineSessionInfoAtto>(SessionId, SessionInfo->HostAddress.ToInternetAddr());
 			    SessionInfo->CopyTo(*Session);
 
-			    if (CurrentMatchmaking)
+			    if (CurrentSessionSearch)
 			    {
-				    CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::Done;
-				    CurrentMatchmaking.Reset();
+				    CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::Done;
+				    CurrentSessionSearch.Reset();
 			    }
 
 			    TriggerOnMatchmakingCompleteDelegates(SessionName, true);
@@ -423,10 +423,10 @@ bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueN
 		    {
 			    UE_LOG_ONLINE(Warning, TEXT("Matchmaking failed due to timeout"));
 
-			    if (CurrentMatchmaking)
+			    if (CurrentSessionSearch)
 			    {
-				    CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::Failed;
-				    CurrentMatchmaking.Reset();
+				    CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::Failed;
+				    CurrentSessionSearch.Reset();
 			    }
 
 			    TriggerOnMatchmakingCompleteDelegates(SessionName, false);
@@ -435,10 +435,10 @@ bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueN
 		    {
 			    UE_LOG_ONLINE(Warning, TEXT("Matchmaking failed: %s"), **Error);
 
-			    if (CurrentMatchmaking)
+			    if (CurrentSessionSearch)
 			    {
-				    CurrentMatchmaking->SearchState = EOnlineAsyncTaskState::Failed;
-				    CurrentMatchmaking.Reset();
+				    CurrentSessionSearch->SearchState = EOnlineAsyncTaskState::Failed;
+				    CurrentSessionSearch.Reset();
 			    }
 
 			    TriggerOnMatchmakingCompleteDelegates(SessionName, false);
@@ -461,7 +461,7 @@ bool FOnlineSessionAtto::CancelMatchmaking(const int32 SearchingPlayerNum, const
 
 bool FOnlineSessionAtto::CancelMatchmaking(const FUniqueNetId& SearchingPlayerId, const FName SessionName)
 {
-	if (!CurrentMatchmaking)
+	if (!CurrentSessionSearch)
 	{
 		return false;
 	}
@@ -473,7 +473,7 @@ bool FOnlineSessionAtto::CancelMatchmaking(const FUniqueNetId& SearchingPlayerId
 		return false;
 	}
 
-	CurrentMatchmaking.Reset();
+	CurrentSessionSearch.Reset();
 
 	Subsystem.AttoClient
 	    ->Send<FAttoCancelMatchmakingRequest>(UserId.Value)
