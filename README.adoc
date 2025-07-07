@@ -8,7 +8,7 @@ IMPORTANT: Atto is not intended for high-load production use.
 Also, Atto server API can be exploited to break things.
 Project goal is just to have a meta service for *early game development*.
 
-Atto aims to be fully compatible with Unreal Engine https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-in-unreal-engine[Online Subsystems], so you should not need to write Atto-specific code.
+Atto aims to be fully compatible with Unreal Engine https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-in-unreal-engine[Online Subsystems], so you should not need to write Atto-specific code in your game.
 If you do have for some reason, either you're using OSS API wrong, or there could be a bug in Atto.
 If you're sure it's the latter, consider reporting it to https://github.com/slonopotamus/Atto/issues[Atto issue tracker].
 
