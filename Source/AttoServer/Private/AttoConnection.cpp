@@ -12,7 +12,7 @@ FAttoConnection::~FAttoConnection()
 {
 	for (const auto& UserId : Users)
 	{
-		Server.Matchmaker.RemoveSession(UserId);
+		Server.Matchmaker.DestroySession(UserId);
 	}
 
 	Server.Matchmaker.Cancel(MatchmakingToken);
@@ -119,29 +119,35 @@ void FAttoConnection::SendFromQueueInternal()
 
 TFuture<FAttoLoginRequest::Result> FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Login request from %s"), *Message.Username);
+
 	auto Func = [&]() -> FAttoLoginRequest::Result {
 		if (Message.BuildUniqueId != GetBuildUniqueId())
 		{
-			return FAttoLoginRequest::Result{
-			    TInPlaceType<FString>(),
-			    FString::Printf(TEXT("Rejecting login [%s]: mismatched build id. Server: %d != Client: %d"), *Message.Username, GetBuildUniqueId(), Message.BuildUniqueId)};
+			const auto Error = FString::Printf(TEXT("Mismatched build id. Server: %d != Client: %d"), GetBuildUniqueId(), Message.BuildUniqueId);
+			UE_LOG(LogAtto, Verbose, TEXT("%s"), *Error);
+			return FAttoLoginRequest::Result{TInPlaceType<FString>(), Error};
 		}
 
 		if (Message.Username.IsEmpty())
 		{
-			return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Username must not be empty")};
+			static const auto* const Error = TEXT("Username must not be empty");
+			UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
+			return FAttoLoginRequest::Result{TInPlaceType<FString>(), Error};
 		}
 
 		if (Message.Username != Message.Password)
 		{
-			return FAttoLoginRequest::Result{TInPlaceType<FString>(), TEXT("Wrong password")};
+			static const auto* const Error = TEXT("Wrong password");
+			UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
+			return FAttoLoginRequest::Result{TInPlaceType<FString>(), Error};
 		}
 
 		const auto Guid = FGuid::NewGuid();
 		const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));
 		Users.Add(Id);
 
-		// TODO: TInPlaceType is weird
+		UE_LOG(LogAtto, Verbose, TEXT("Login succeeded with userId=%016llx"), Id);
 		return FAttoLoginRequest::Result{TInPlaceType<uint64>(), Id};
 	};
 
@@ -150,12 +156,18 @@ TFuture<FAttoLoginRequest::Result> FAttoConnection::operator()(const FAttoLoginR
 
 TFuture<FAttoLogoutRequest::Result> FAttoConnection::operator()(const FAttoLogoutRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Logout request from %016llx"), Message.UserId);
 	const bool bSuccess = Users.Remove(Message.UserId) > 0;
 
 	if (bSuccess)
 	{
-		Server.Matchmaker.RemoveSession(Message.UserId);
+		Server.Matchmaker.DestroySession(Message.UserId);
 		Server.Matchmaker.Cancel(MatchmakingToken);
+		UE_LOG(LogAtto, Verbose, TEXT("Logout succeeded"));
+	}
+	else
+	{
+		UE_LOG(LogAtto, Verbose, TEXT("Logout failed"));
 	}
 
 	return MakeFulfilledPromise<FAttoLogoutRequest::Result>(bSuccess).GetFuture();
@@ -163,11 +175,24 @@ TFuture<FAttoLogoutRequest::Result> FAttoConnection::operator()(const FAttoLogou
 
 TFuture<FAttoCreateSessionRequest::Result> FAttoConnection::operator()(const FAttoCreateSessionRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Create session request from %016llx"), Message.OwningUserId);
 	bool bSuccess = false;
 
 	if (Users.Contains(Message.OwningUserId))
 	{
-		bSuccess = Server.Matchmaker.AddSession(Message.OwningUserId, Message.SessionInfo);
+		if (Server.Matchmaker.CreateSession(Message.OwningUserId, Message.SessionInfo))
+		{
+			UE_LOG(LogAtto, Verbose, TEXT("Session created successfully"));
+			bSuccess = true;
+		}
+		else
+		{
+			UE_LOG(LogAtto, Verbose, TEXT("Create session failed"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogAtto, Verbose, TEXT("Create session failed: user is not authenticated"));
 	}
 
 	return MakeFulfilledPromise<FAttoCreateSessionRequest::Result>(bSuccess).GetFuture();
@@ -175,11 +200,25 @@ TFuture<FAttoCreateSessionRequest::Result> FAttoConnection::operator()(const FAt
 
 TFuture<FAttoUpdateSessionRequest::Result> FAttoConnection::operator()(const FAttoUpdateSessionRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Update session request from %016llx"), Message.OwningUserId);
+
 	bool bSuccess = false;
 
 	if (Users.Contains(Message.OwningUserId))
 	{
-		bSuccess = Server.Matchmaker.UpdateSession(Message.OwningUserId, Message.SessionInfo);
+		if (Server.Matchmaker.UpdateSession(Message.OwningUserId, Message.SessionInfo))
+		{
+			UE_LOG(LogAtto, Verbose, TEXT("Session updated successfully"));
+			bSuccess = true;
+		}
+		else
+		{
+			UE_LOG(LogAtto, Verbose, TEXT("Update session failed"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogAtto, Verbose, TEXT("Update session failed: user is not authenticated"));
 	}
 
 	return MakeFulfilledPromise<FAttoUpdateSessionRequest::Result>(bSuccess).GetFuture();
@@ -187,11 +226,24 @@ TFuture<FAttoUpdateSessionRequest::Result> FAttoConnection::operator()(const FAt
 
 TFuture<FAttoDestroySessionRequest::Result> FAttoConnection::operator()(const FAttoDestroySessionRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Destroy session request from %016llx"), Message.OwningUserId);
 	bool bSuccess = false;
 
 	if (Users.Contains(Message.OwningUserId))
 	{
-		bSuccess = Server.Matchmaker.RemoveSession(Message.OwningUserId);
+		if (Server.Matchmaker.DestroySession(Message.OwningUserId))
+		{
+			UE_LOG(LogAtto, Verbose, TEXT("Session destroyed successfully"));
+			bSuccess = true;
+		}
+		else
+		{
+			UE_LOG(LogAtto, Verbose, TEXT("Destroy session failed"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogAtto, Verbose, TEXT("Destroy session failed: user is not authenticated"));
 	}
 
 	return MakeFulfilledPromise<FAttoDestroySessionRequest::Result>(bSuccess).GetFuture();
@@ -199,11 +251,17 @@ TFuture<FAttoDestroySessionRequest::Result> FAttoConnection::operator()(const FA
 
 TFuture<FAttoFindSessionsRequest::Result> FAttoConnection::operator()(const FAttoFindSessionsRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Find sessions request [%d] from %016llx"), Message.RequestId, Message.SearchingUserId);
 	TArray<FAttoSessionInfo> Sessions;
 
-	if (!Users.IsEmpty())
+	if (Users.Contains(Message.SearchingUserId))
 	{
 		Server.Matchmaker.FindSessions(Users.Num(), Message, Sessions);
+		UE_LOG(LogAtto, Verbose, TEXT("Sessions found: %d"), Sessions.Num());
+	}
+	else
+	{
+		UE_LOG(LogAtto, Verbose, TEXT("Find sessions failed: user is not authenticated"));
 	}
 
 	return MakeFulfilledPromise<FAttoFindSessionsRequest::Result>(Message.RequestId, MoveTemp(Sessions)).GetFuture();
@@ -211,27 +269,43 @@ TFuture<FAttoFindSessionsRequest::Result> FAttoConnection::operator()(const FAtt
 
 TFuture<FAttoQueryServerUtcTimeRequest::Result> FAttoConnection::operator()(const FAttoQueryServerUtcTimeRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Query server UTC time request"));
 	return MakeFulfilledPromise<FAttoQueryServerUtcTimeRequest::Result>(FDateTime::UtcNow()).GetFuture();
 }
 
 TFuture<FAttoStartMatchmakingRequest::Result> FAttoConnection::operator()(const FAttoStartMatchmakingRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Start matchmaking request"));
+
+	if (Users.IsEmpty())
+	{
+		static const auto* const Error = TEXT("Not authenticated");
+		UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
+		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, Error).GetFuture();
+	}
+
 	if (Users.Num() != Message.Users.Num())
 	{
-		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, FString::Printf(TEXT("All connected users must enter matchmaking"))).GetFuture();
+		static const auto* const Error = TEXT("All connected users must enter matchmaking");
+		UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
+		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, Error).GetFuture();
 	}
 
 	for (const auto& User : Message.Users)
 	{
 		if (!Users.Contains(User))
 		{
-			return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, FString::Printf(TEXT("User %016llx is not logged in"), User)).GetFuture();
+			const auto Error = FString::Printf(TEXT("User %016llx is not logged in"), User);
+			UE_LOG(LogAtto, Verbose, TEXT("%s"), *Error);
+			return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, Error).GetFuture();
 		}
 	}
 
 	if (MatchmakingToken.IsValid())
 	{
-		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, TEXT("Already in matchmaking queue")).GetFuture();
+		static const auto* const Error = TEXT("Already in matchmaking queue");
+		UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
+		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, Error).GetFuture();
 	}
 
 	return Server.Matchmaker.Enqueue(MatchmakingToken, Users.Num(), Message)
@@ -243,11 +317,24 @@ TFuture<FAttoStartMatchmakingRequest::Result> FAttoConnection::operator()(const 
 
 TFuture<FAttoCancelMatchmakingRequest::Result> FAttoConnection::operator()(const FAttoCancelMatchmakingRequest& Message)
 {
+	UE_LOG(LogAtto, Verbose, TEXT("Cancel matchmaking request from %016llx"), Message.UserId);
 	bool bSuccess = false;
 
 	if (Users.Contains(Message.UserId))
 	{
-		bSuccess = Server.Matchmaker.Cancel(MatchmakingToken);
+		if (Server.Matchmaker.Cancel(MatchmakingToken))
+		{
+			UE_LOG(LogAtto, Verbose, TEXT("Matchmaking canceled successfully"));
+			bSuccess = true;
+		}
+		else
+		{
+			UE_LOG(LogAtto, Verbose, TEXT("Cancel matchmaking failed"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogAtto, Verbose, TEXT("Cancel matchmaking failed: user is not authenticated"));
 	}
 
 	return MakeFulfilledPromise<FAttoCancelMatchmakingRequest::Result>(bSuccess).GetFuture();

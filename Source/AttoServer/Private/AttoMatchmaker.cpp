@@ -271,7 +271,7 @@ bool FAttoMatchmaker::Cancel(FGuid& Token)
 	return false;
 }
 
-bool FAttoMatchmaker::AddSession(const uint64 OwningUserId, const FAttoSessionInfo& SessionInfo)
+bool FAttoMatchmaker::CreateSession(const uint64 OwningUserId, const FAttoSessionInfo& SessionInfo)
 {
 	// TODO: Check if entry already exists? For any of users in the same connection? But what if they login later?
 	Sessions.Add(OwningUserId, {{}, SessionInfo});
@@ -289,7 +289,7 @@ bool FAttoMatchmaker::UpdateSession(uint64 OwningUserId, const FAttoSessionUpdat
 	return false;
 }
 
-bool FAttoMatchmaker::RemoveSession(const uint64 OwningUserId)
+bool FAttoMatchmaker::DestroySession(const uint64 OwningUserId)
 {
 	return Sessions.Remove(OwningUserId) > 0;
 }
