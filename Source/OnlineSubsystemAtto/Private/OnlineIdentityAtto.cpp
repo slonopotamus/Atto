@@ -71,6 +71,8 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 
 				        UE_LOG_ONLINE(Log, TEXT("Successfully logged into Atto server, userId=%s"), *UserId->ToDebugString());
 				        TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
+				        TriggerOnLoginChangedDelegates(LocalUserNum);
+				        TriggerOnLoginStatusChangedDelegates(LocalUserNum, ELoginStatus::NotLoggedIn, ELoginStatus::LoggedIn, *UserId);
 			        }
 			        else
 			        {
@@ -104,6 +106,8 @@ bool FOnlineIdentityAtto::Logout(const int32 LocalUserNum)
 	    .Next([=, this](auto&& Response) {
 		    const auto bSuccess = Response.IsOk() && Response.GetOkValue().bSuccess;
 		    TriggerOnLogoutCompleteDelegates(LocalUserNum, bSuccess);
+		    TriggerOnLoginChangedDelegates(LocalUserNum);
+		    TriggerOnLoginStatusChangedDelegates(LocalUserNum, ELoginStatus::LoggedIn, ELoginStatus::NotLoggedIn, FUniqueNetIdAtto::Invalid);
 	    });
 
 	return true;
@@ -224,4 +228,16 @@ int32 FOnlineIdentityAtto::GetLocalUserNumFromUniqueNetId(const FUniqueNetId& Un
 	}
 
 	return INDEX_NONE;
+}
+
+void FOnlineIdentityAtto::HandleDisconnect()
+{
+	for (const auto& [LocalUserNum, LocalUserNetId] : LocalUsers)
+	{
+		TriggerOnLoginChangedDelegates(LocalUserNum);
+		TriggerOnLoginStatusChangedDelegates(LocalUserNum, ELoginStatus::LoggedIn, ELoginStatus::NotLoggedIn, FUniqueNetIdAtto::Invalid);
+	}
+
+	LocalUsers.Empty();
+	Accounts.Empty();
 }

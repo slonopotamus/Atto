@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameFramework/GameSession.h"
+#include "OnlineSubsystemTypes.h"
 #include "AttoGameSession.generated.h"
 
 class FOnlineSessionSettings;
@@ -15,6 +16,8 @@ class ATTOCOMMON_API AAttoGameSession : public AGameSession
 
 	FDelegateHandle OnCreateSessionCompleteDelegateHandle;
 
+	FDelegateHandle OnLoginStatusChangedDelegateHandle;
+
 public:
 	virtual FOnlineSessionSettings BuildSessionSettings() const;
 
@@ -23,4 +26,8 @@ public:
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
 
 	virtual void OnCreateSessionComplete(FName InSessionName, bool bWasSuccessful);
+
+	virtual void OnLoginStatusChanged(int32 LocalPlayerIndex, ELoginStatus::Type OldStatus, ELoginStatus::Type NewStatus, const FUniqueNetId& NewId);
+
+	virtual void RegisterServerFailed() override;
 };

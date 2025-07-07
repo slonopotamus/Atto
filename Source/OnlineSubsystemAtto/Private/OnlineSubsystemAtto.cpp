@@ -22,11 +22,12 @@ bool FOnlineSubsystemAtto::Init()
 	UE_LOG_ONLINE(Log, TEXT("Atto server url: %s"), **ConnectUrl);
 	AttoClient = MakeShared<FAttoClient>(MoveTemp(*ConnectUrl));
 
-	AttoClient->OnDisconnected.AddLambda([](const FString& Error, const bool bWasClean) {
+	AttoClient->OnDisconnected.AddLambda([this](const FString& Error, const bool bWasClean) {
 		// TODO: We need better error handling
-		// 1. Current in-flight requests callbacks will never be called
-		// 2. Our current state will not properly reflect the fact that server cleaned up everything
+		// Our current state will not properly reflect the fact that server cleaned up everything
 		UE_LOG(LogAtto, Error, TEXT("Disconnected from Atto server: %s"), *Error);
+
+		IdentityInterface->HandleDisconnect();
 	});
 
 	IdentityInterface = MakeShared<FOnlineIdentityAtto>(*this);

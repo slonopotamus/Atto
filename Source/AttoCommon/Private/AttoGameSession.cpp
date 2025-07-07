@@ -31,6 +31,11 @@ void AAttoGameSession::RegisterServer()
 		UE_LOG(LogAtto, Log, TEXT("Creating game session: %s"), *SessionName.ToString());
 		SessionInt->CreateSession(0, SessionName, Settings);
 	}
+
+	if (const auto& IdentityInt = Online::GetIdentityInterface(GetWorld()); ensure(IdentityInt))
+	{
+		OnLoginStatusChangedDelegateHandle = IdentityInt->AddOnLoginStatusChangedDelegate_Handle(0, FOnLoginStatusChangedDelegate::CreateUObject(this, &ThisClass::OnLoginStatusChanged));
+	}
 }
 
 void AAttoGameSession::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -41,6 +46,11 @@ void AAttoGameSession::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		SessionInt->ClearOnCreateSessionCompleteDelegate_Handle(OnCreateSessionCompleteDelegateHandle);
 		SessionInt->DestroySession(SessionName);
+	}
+
+	if (const auto& IdentityInt = Online::GetIdentityInterface(GetWorld()); ensure(IdentityInt))
+	{
+		IdentityInt->ClearOnLoginStatusChangedDelegate_Handle(0, OnLoginStatusChangedDelegateHandle);
 	}
 }
 
@@ -61,5 +71,27 @@ void AAttoGameSession::OnCreateSessionComplete(const FName InSessionName, bool b
 	if (!bWasSuccessful)
 	{
 		RegisterServerFailed();
+	}
+}
+
+void AAttoGameSession::OnLoginStatusChanged(int32 LocalPlayerIndex, ELoginStatus::Type OldStatus, ELoginStatus::Type NewStatus, const FUniqueNetId& NewId)
+{
+	if (NewStatus == ELoginStatus::NotLoggedIn)
+	{
+		RegisterServerFailed();
+	}
+}
+
+void AAttoGameSession::RegisterServerFailed()
+{
+	Super::RegisterServerFailed();
+
+	if (IsRunningDedicatedServer())
+	{
+		FPlatformMisc::RequestExitWithStatus(false, 33);
+	}
+	else
+	{
+		ReturnToMainMenuHost();
 	}
 }

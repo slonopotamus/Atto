@@ -53,4 +53,6 @@ public:
 	virtual FString GetAuthType() const override;
 
 	int32 GetLocalUserNumFromUniqueNetId(const FUniqueNetId& UniqueNetId) const;
+
+	void HandleDisconnect();
 };
