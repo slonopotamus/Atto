@@ -513,6 +513,7 @@ bool FOnlineSessionAtto::FindSessions(const FUniqueNetId& SearchingPlayerId, con
 
 	Subsystem.AttoClient->Send<FAttoFindSessionsRequest>(
 	                        ConvertSearchParams(SearchSettings->QuerySettings.SearchParams),
+	                        StaticCastSharedRef<const FUniqueNetIdAtto>(SearchingPlayerIdRef)->Value,
 	                        SearchSettings->PlatformHash,
 	                        SearchSettings->MaxSearchResults)
 	    .Next([=, this](auto&& Result) {

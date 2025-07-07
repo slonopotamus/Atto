@@ -54,11 +54,11 @@ public:
 
 	bool Cancel(FGuid& Token);
 
-	bool AddSession(uint64 OwningUserId, const FAttoSessionInfo& SessionInfo);
+	bool CreateSession(uint64 OwningUserId, const FAttoSessionInfo& SessionInfo);
 
 	bool UpdateSession(uint64 OwningUserId, const FAttoSessionUpdatableInfo& UpdatableInfo);
 
-	bool RemoveSession(uint64 OwningUserId);
+	bool DestroySession(uint64 OwningUserId);
 
 	TFuture<FAttoStartMatchmakingRequest::Result> Enqueue(FGuid& Token,
 	                                                      const int32 NumPlayers,

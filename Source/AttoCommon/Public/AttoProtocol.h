@@ -256,12 +256,15 @@ struct ATTOCOMMON_API FAttoFindSessionsRequest
 {
 	TMap<FString, FAttoFindSessionsParam> Params;
 
+	uint64 SearchingUserId = 0;
+
 	int32 RequestId = 0;
 
 	int32 MaxResults = 0;
 
 	friend FArchive& operator<<(FArchive& Ar, FAttoFindSessionsRequest& Message)
 	{
+		Ar << Message.SearchingUserId;
 		Ar << Message.Params;
 		Ar << Message.RequestId;
 		Ar << Message.MaxResults;
