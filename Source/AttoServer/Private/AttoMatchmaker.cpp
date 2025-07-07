@@ -320,8 +320,10 @@ void FAttoMatchmaker::Tick(const float DeltaSeconds)
 
 			int32 RemainingCapacity = Session.SessionInfo.UpdatableInfo.NumOpenPublicConnections;
 
-			// Reverse order so we first try to matchmake bigger teams
-			for (auto& [NumPlayers, Queue] : ReverseIterate(QueuesByPlayersNum))
+			// TODO: Is it possible to make reverse ranged over TMap?
+			// ReverseIterate(...) doesn't support it.
+			// There is TMap::TReverseIterator, but it is not suitable for ranged for
+			for (auto& [NumPlayers, Queue] : QueuesByPlayersNum)
 			{
 				if (RemainingCapacity < NumPlayers)
 				{

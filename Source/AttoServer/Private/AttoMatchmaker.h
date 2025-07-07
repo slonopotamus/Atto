@@ -42,7 +42,8 @@ class FAttoMatchmaker final : public FNoncopyable
 	// TODO: Can we do better?
 	const FTimespan MatchmakerCooldown = FTimespan::FromSeconds(30);
 
-	TSortedMap<int32, TArray<FAttoMatchmakerMember>> QueuesByPlayersNum;
+	// Reverse order so we first try to matchmake bigger teams
+	TSortedMap<int32, TArray<FAttoMatchmakerMember>, FDefaultAllocator, TGreater<int32>> QueuesByPlayersNum;
 
 	// Stored here to reduce allocations in FAttoMatchmaker::Tick
 	TArray<decltype(QueuesByPlayersNum)::ValueType::TIterator> Match;
