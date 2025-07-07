@@ -5,6 +5,7 @@
 Atto is an Unreal Engine plugin that implements a minimalistic backend / meta service.
 
 IMPORTANT: Atto is not intended for high-load production use.
+Also, Atto server API can be exploited to break things.
 The goal is to have _a_ meta service for early game development.
 
 Atto aims to be fully compatible with Unreal Engine https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-in-unreal-engine[Online Subsystems], so you should not need to write Atto-specific code.
