@@ -5,7 +5,6 @@
 extern ONLINESUBSYSTEMATTO_API const FName ATTO_SUBSYSTEM;
 
 class FAttoClient;
-class FOnlineAsyncTaskManagerAtto;
 class FOnlineIdentityAtto;
 class FOnlineSessionAtto;
 class FOnlineTimeAtto;
@@ -13,8 +12,6 @@ class FOnlineTimeAtto;
 class ONLINESUBSYSTEMATTO_API FOnlineSubsystemAtto final : public FOnlineSubsystemImpl
 {
 	typedef FOnlineSubsystemImpl Super;
-
-	TSharedPtr<FRunnableThread> OnlineAsyncTaskThread;
 
 public:
 	explicit FOnlineSubsystemAtto(const FName InInstanceName)
@@ -41,8 +38,6 @@ public:
 	virtual TSharedPtr<IOnlineTime> GetTimeInterface() const override;
 
 	TSharedPtr<FAttoClient> AttoClient;
-
-	TSharedPtr<FOnlineAsyncTaskManagerAtto> TaskManager;
 
 	TSharedPtr<FOnlineIdentityAtto> IdentityInterface;
 

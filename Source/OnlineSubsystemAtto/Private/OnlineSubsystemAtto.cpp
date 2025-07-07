@@ -1,7 +1,6 @@
 #include "OnlineSubsystemAtto.h"
 #include "AttoClient.h"
 #include "AttoCommon.h"
-#include "OnlineAsyncTaskManagerAtto.h"
 #include "OnlineIdentityAtto.h"
 #include "OnlineSessionAtto.h"
 #include "OnlineTimeAtto.h"
@@ -34,16 +33,6 @@ bool FOnlineSubsystemAtto::Init()
 	SessionInterface = MakeShared<FOnlineSessionAtto>(*this);
 	TimeInterface = MakeShared<FOnlineTimeAtto>(*this);
 
-	TaskManager = MakeShared<FOnlineAsyncTaskManagerAtto>(*this);
-
-	if (!TaskManager->Init())
-	{
-		UE_LOG_ONLINE(Error, TEXT("Failed to init Atto TaskManager"));
-		return false;
-	}
-
-	OnlineAsyncTaskThread = MakeShareable(FRunnableThread::Create(TaskManager.Get(), TEXT("OnlineSubsystemAtto"), 128 * 1024, TPri_Normal));
-
 	// 1. We do not want to connect editor to itself
 	// 2. Dedicated servers will auto-login in AGameSession::ProcessAutoLogin anyway
 	// 3. PIE is handled by bOnlinePIEEnabled
@@ -75,14 +64,11 @@ bool FOnlineSubsystemAtto::Shutdown()
 {
 	UE_LOG_ONLINE(VeryVerbose, TEXT("FOnlineSubsystemAtto::Shutdown()"));
 
-	OnlineAsyncTaskThread.Reset();
 	AttoClient.Reset();
 
 	DestructAttoInterface(IdentityInterface);
 	DestructAttoInterface(SessionInterface);
 	DestructAttoInterface(TimeInterface);
-
-	TaskManager.Reset();
 
 	Super::Shutdown();
 
@@ -96,11 +82,6 @@ bool FOnlineSubsystemAtto::Tick(const float DeltaSeconds)
 	if (!Super::Tick(DeltaSeconds))
 	{
 		return false;
-	}
-
-	if (TaskManager)
-	{
-		TaskManager->GameTick();
 	}
 
 	return true;
