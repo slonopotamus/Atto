@@ -10,7 +10,11 @@ public class AttoCommon : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"OnlineSubsystem",
-			"OnlineSubsystemUtils",
+			"OnlineSubsystemUtils"
+		});
+
+		PrivateDependencyModuleNames.AddRange(new[]
+		{
 			"Sockets"
 		});
 	}
