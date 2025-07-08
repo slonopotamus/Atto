@@ -445,7 +445,7 @@ bool FOnlineSessionAtto::StartMatchmaking(const TArray<TSharedRef<const FUniqueN
 		    }
 		    else
 		    {
-			    Response.GetOkValue().template Get<FAttoStartMatchmakingRequest::FCanceled>();
+			    (void)Response.GetOkValue().template Get<FAttoStartMatchmakingRequest::FCanceled>();
 			    TriggerOnMatchmakingCompleteDelegates(SessionName, false);
 		    }
 	    });
