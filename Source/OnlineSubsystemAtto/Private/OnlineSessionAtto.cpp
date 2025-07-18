@@ -792,11 +792,21 @@ bool FOnlineSessionAtto::RegisterPlayers(const FName SessionName, const TArray<T
 	const auto NumBefore = Session->RegisteredPlayers.Num();
 	for (const auto& Player : Players)
 	{
-		Session->RegisteredPlayers.AddUnique(Player);
+		if (Session->RegisteredPlayers.Contains(Player))
+		{
+			UE_LOG_ONLINE_SESSION(Warning, TEXT("Player %s already registered in session %s"), *Player->ToDebugString(), *SessionName.ToString());
+		}
+		else
+		{
+			Session->RegisteredPlayers.AddUnique(Player);
+			UE_LOG_ONLINE_SESSION(Log, TEXT("Registered player %s in session %s"), *Player->ToDebugString(), *SessionName.ToString());
+		}
 	}
 	const auto NumAdded = Session->RegisteredPlayers.Num() - NumBefore;
 
 	Session->NumOpenPublicConnections = FMath::Clamp(Session->NumOpenPublicConnections - NumAdded, 0, Session->SessionSettings.NumPublicConnections);
+	UE_LOG_ONLINE_SESSION(Log, TEXT("Open connections in session %s: %d"), *SessionName.ToString(), Session->NumOpenPublicConnections);
+
 	UpdateSession(SessionName, Session->SessionSettings);
 
 	TriggerOnRegisterPlayersCompleteDelegates(SessionName, Players, true);
@@ -817,13 +827,23 @@ bool FOnlineSessionAtto::UnregisterPlayers(const FName SessionName, const TArray
 		return false;
 	}
 
-	int32 NumRemoved = 0;
+	const auto NumBefore = Session->RegisteredPlayers.Num();
 	for (const auto& Player : Players)
 	{
-		NumRemoved += Session->RegisteredPlayers.RemoveSwap(Player);
+		if (Session->RegisteredPlayers.RemoveSwap(Player) > 0)
+		{
+			UE_LOG_ONLINE_SESSION(Log, TEXT("Unregistered player %s from session %s"), *Player->ToDebugString(), *SessionName.ToString());
+		}
+		else
+		{
+			UE_LOG_ONLINE_SESSION(Warning, TEXT("Player %s was not registered in session %s"), *Player->ToDebugString(), *SessionName.ToString());
+		}
 	}
+	const auto NumRemoved = NumBefore - Session->RegisteredPlayers.Num();
 
 	Session->NumOpenPublicConnections = FMath::Clamp(Session->NumOpenPublicConnections + NumRemoved, 0, Session->SessionSettings.NumPublicConnections);
+	UE_LOG_ONLINE_SESSION(Log, TEXT("Open connections in session %s: %d"), *SessionName.ToString(), Session->NumOpenPublicConnections);
+
 	UpdateSession(SessionName, Session->SessionSettings);
 
 	TriggerOnUnregisterPlayersCompleteDelegates(SessionName, Players, true);
