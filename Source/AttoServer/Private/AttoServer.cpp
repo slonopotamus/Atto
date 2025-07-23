@@ -27,6 +27,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 						// TODO: Log connection accepted
 						Server->Connections.Add(new (Connection) FAttoConnection{*Server, LwsConnection});
 					}
+
 					break;
 				}
 
@@ -48,6 +49,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 					{
 						Connection->ReceiveInternal(In, Len);
 					}
+
 					break;
 				}
 
@@ -57,6 +59,7 @@ static int AttoServerCallback(lws* LwsConnection, const lws_callback_reasons Rea
 					{
 						Connection->SendFromQueueInternal();
 					}
+
 					break;
 				}
 			}

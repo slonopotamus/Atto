@@ -8,6 +8,40 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 #undef UI
 
+FAttoMessage::FAttoMessage(const void* Data, const size_t Size)
+{
+	Buffer.Reserve(LWS_PRE + Size);
+	Buffer.AddDefaulted(LWS_PRE);
+	Buffer.Append(static_cast<const unsigned char*>(Data), Size);
+	Payload = {Buffer.GetData() + LWS_PRE, static_cast<int32>(Size)};
+}
+
+FAttoMessage::FAttoMessage()
+{
+	Buffer.AddDefaulted(LWS_PRE);
+	Payload = {Buffer.GetData() + LWS_PRE, 0};
+}
+
+bool FAttoMessage::Write(lws* LwsConnection)
+{
+	const auto Protocol = BytesWritten == 0 ? LWS_WRITE_BINARY : LWS_WRITE_CONTINUATION;
+
+	const auto NewBytesWritten = lws_write(
+	    LwsConnection,
+	    Payload.GetData() + BytesWritten,
+	    Payload.NumBytes() - BytesWritten,
+	    Protocol);
+
+	if (NewBytesWritten < 0)
+	{
+		// TODO: Log error?
+		return true;
+	}
+
+	BytesWritten += NewBytesWritten;
+	return BytesWritten >= Payload.NumBytes();
+}
+
 FAttoConnection::~FAttoConnection()
 {
 	for (const auto& UserId : Users)
@@ -69,15 +103,7 @@ void FAttoConnection::SendRaw(const void* Data, const size_t Size)
 		return;
 	}
 
-	TArray<unsigned char> Payload;
-
-	Payload.Reserve(LWS_PRE + Size);
-	Payload.AddDefaulted(LWS_PRE);
-	Payload.Append(static_cast<const unsigned char*>(Data), Size);
-
-	SendQueue.Enqueue({
-	    .Payload = MoveTemp(Payload),
-	});
+	SendQueue.Enqueue(FAttoMessage{Data, Size});
 
 	lws_callback_on_writable(LwsConnection);
 }
@@ -86,28 +112,9 @@ void FAttoConnection::SendFromQueueInternal()
 {
 	if (auto* Message = SendQueue.Peek(); ensure(Message))
 	{
-		const auto PayloadSize = Message->Payload.Num() - LWS_PRE;
-		const auto Offset = Message->BytesWritten;
-		const auto Protocol = Message->BytesWritten == 0 ? LWS_WRITE_BINARY : LWS_WRITE_CONTINUATION;
-
-		const auto BytesWritten = lws_write(
-		    LwsConnection,
-		    Message->Payload.GetData() + LWS_PRE + Offset,
-		    PayloadSize - Offset,
-		    Protocol);
-
-		if (BytesWritten < 0)
+		if (Message->Write(LwsConnection))
 		{
-			// TODO: Log error?
 			SendQueue.Pop();
-		}
-		else
-		{
-			Message->BytesWritten += BytesWritten;
-			if (Message->BytesWritten >= PayloadSize)
-			{
-				SendQueue.Pop();
-			}
 		}
 	}
 

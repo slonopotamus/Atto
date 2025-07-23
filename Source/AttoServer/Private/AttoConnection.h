@@ -6,9 +6,19 @@ class FAttoServer;
 class FAttoServerInstance;
 struct lws;
 
-struct FAttoMessage final
+class FAttoMessage final
 {
-	TArray<unsigned char> Payload;
+public:
+	explicit FAttoMessage(const void* Data, const size_t Size);
+
+	FAttoMessage();
+
+	bool Write(lws* LwsConnection);
+
+private:
+	TArray<unsigned char> Buffer;
+	TArrayView<unsigned char> Payload;
+
 	int32 BytesWritten = 0;
 };
 
