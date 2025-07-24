@@ -1,6 +1,7 @@
 = Atto Server
 :source-highlighter: rouge
 :icons: font
+:toc:
 
 Atto is an Unreal Engine plugin that implements a minimalistic backend / meta service.
 
