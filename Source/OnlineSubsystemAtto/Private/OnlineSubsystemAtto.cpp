@@ -50,21 +50,20 @@ bool FOnlineSubsystemAtto::Init()
 	return true;
 }
 
-template<typename T>
-static void DestructAttoInterface(TSharedPtr<T>& Interface)
-{
-	if (Interface)
-	{
-		ensure(Interface.IsUnique());
-		Interface.Reset();
-	}
-}
-
 bool FOnlineSubsystemAtto::Shutdown()
 {
 	UE_LOG_ONLINE(VeryVerbose, TEXT("FOnlineSubsystemAtto::Shutdown()"));
 
 	AttoClient.Reset();
+
+	auto DestructAttoInterface = []<typename T>(TSharedPtr<T>& Interface)
+	{
+		if (Interface)
+		{
+			ensure(Interface.IsUnique());
+			Interface.Reset();
+		}
+	};
 
 	DestructAttoInterface(IdentityInterface);
 	DestructAttoInterface(SessionInterface);
