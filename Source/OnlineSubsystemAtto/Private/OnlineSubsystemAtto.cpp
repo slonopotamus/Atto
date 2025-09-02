@@ -56,8 +56,7 @@ bool FOnlineSubsystemAtto::Shutdown()
 
 	AttoClient.Reset();
 
-	auto DestructAttoInterface = []<typename T>(TSharedPtr<T>& Interface)
-	{
+	auto DestructAttoInterface = []<typename T>(TSharedPtr<T>& Interface) {
 		if (Interface)
 		{
 			ensure(Interface.IsUnique());
