@@ -8,28 +8,25 @@ THIRD_PARTY_INCLUDES_START
 THIRD_PARTY_INCLUDES_END
 #undef UI
 
-FAttoMessage::FAttoMessage(const void* Data, const size_t Size)
-{
-	Buffer.Reserve(LWS_PRE + Size);
-	Buffer.AddDefaulted(LWS_PRE);
-	Buffer.Append(static_cast<const unsigned char*>(Data), Size);
-	Payload = {Buffer.GetData() + LWS_PRE, static_cast<int32>(Size)};
-}
-
 FAttoMessage::FAttoMessage()
+    : Ar{0, true}
 {
-	Buffer.AddDefaulted(LWS_PRE);
-	Payload = {Buffer.GetData() + LWS_PRE, 0};
+	for (int Index = 0; Index < LWS_PRE; ++Index)
+	{
+		uint8 Char = 0;
+		Ar << Char;
+	}
 }
 
 bool FAttoMessage::Write(lws* LwsConnection)
 {
+	const auto TotalLength = Ar.GetNumBytes() - LWS_PRE;
 	const auto Protocol = BytesWritten == 0 ? LWS_WRITE_BINARY : LWS_WRITE_CONTINUATION;
 
 	const auto NewBytesWritten = lws_write(
 	    LwsConnection,
-	    Payload.GetData() + BytesWritten,
-	    Payload.NumBytes() - BytesWritten,
+	    Ar.GetData() + LWS_PRE + BytesWritten,
+	    TotalLength - BytesWritten,
 	    Protocol);
 
 	if (NewBytesWritten < 0)
@@ -39,7 +36,7 @@ bool FAttoMessage::Write(lws* LwsConnection)
 	}
 
 	BytesWritten += NewBytesWritten;
-	return BytesWritten >= Payload.NumBytes();
+	return BytesWritten >= TotalLength;
 }
 
 FAttoConnection::~FAttoConnection()
@@ -96,14 +93,9 @@ void FAttoConnection::ReceiveInternal(const void* Data, const size_t Size)
 	    Message);
 }
 
-void FAttoConnection::SendRaw(const void* Data, const size_t Size)
+void FAttoConnection::Enqueue(FAttoMessage&& Message)
 {
-	if (!ensure(Data))
-	{
-		return;
-	}
-
-	SendQueue.Enqueue(FAttoMessage{Data, Size});
+	SendQueue.Enqueue(MoveTemp(Message));
 
 	lws_callback_on_writable(LwsConnection);
 }

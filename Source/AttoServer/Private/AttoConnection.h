@@ -9,16 +9,13 @@ struct lws;
 class FAttoMessage final
 {
 public:
-	explicit FAttoMessage(const void* Data, const size_t Size);
-
 	FAttoMessage();
 
 	bool Write(lws* LwsConnection);
 
-private:
-	TArray<unsigned char> Buffer;
-	TArrayView<unsigned char> Payload;
+	FBitWriter Ar;
 
+private:
 	int32 BytesWritten = 0;
 };
 
@@ -34,20 +31,19 @@ class FAttoConnection final : public FNoncopyable
 
 	TQueue<FAttoMessage> SendQueue;
 
-	void SendRaw(const void* Data, size_t Size);
+	void Enqueue(FAttoMessage&& Message);
 
 	template<typename T>
 	void SendImpl(int64 RequestId, T&& Message)
 	{
-		// TODO: Store writer between calls to reduce allocations?
-		FBitWriter Ar{0, true};
+		FAttoMessage RawMessage;
 
-		Ar << RequestId;
-		Ar << Message;
+		RawMessage.Ar << RequestId;
+		RawMessage.Ar << Message;
 
-		if (ensure(!Ar.IsError()))
+		if (ensure(!RawMessage.Ar.IsError()))
 		{
-			SendRaw(Ar.GetData(), Ar.GetNumBytes());
+			Enqueue(MoveTemp(RawMessage));
 		}
 	}
 
