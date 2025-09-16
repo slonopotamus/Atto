@@ -8,6 +8,7 @@ public class AttoServer : ModuleRules
 		{
 			"AttoCommon",
 			"Core",
+			"CoreOnline",
 			"CoreUObject",
 			"Engine",
 			"libWebSockets",

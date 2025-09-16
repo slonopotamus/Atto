@@ -53,34 +53,69 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 			    return;
 		    }
 
-		    Subsystem.AttoClient
-		        ->Send<FAttoLoginRequest>(AccountCredentials.Id, AccountCredentials.Token, GetBuildUniqueId())
-		        .Next([=, this](auto&& LoginResult) {
-			        if (!LoginResult.IsOk())
-			        {
-				        TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, TEXT(""));
-				        return;
-			        }
+		    auto OnPlatformNicknameObtained = [=, this](const TOptional<FString>& PlatformNickname) {
+			    Subsystem.AttoClient
+			        ->Send<FAttoLoginRequest>(AccountCredentials.Id, AccountCredentials.Token, GetBuildUniqueId(), PlatformNickname)
+			        .Next([=, this](auto&& LoginResult) {
+				        if (!LoginResult.IsOk())
+				        {
+					        TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, TEXT(""));
+					        return;
+				        }
 
-			        // TODO: Rewrite this using Visit
-			        if (const auto* UserIdPtr = LoginResult.GetOkValue().template TryGet<uint64>())
-			        {
-				        const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
-				        Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
-				        LocalUsers.Add(LocalUserNum, UserId);
+				        // TODO: Rewrite this using Visit
+				        if (const auto* UserIdPtr = LoginResult.GetOkValue().template TryGet<uint64>())
+				        {
+					        const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
+					        Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
+					        LocalUsers.Add(LocalUserNum, UserId);
 
-				        UE_LOG_ONLINE(Log, TEXT("Successfully logged into Atto server, userId=%s"), *UserId->ToDebugString());
-				        TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
-				        TriggerOnLoginChangedDelegates(LocalUserNum);
-				        TriggerOnLoginStatusChangedDelegates(LocalUserNum, ELoginStatus::NotLoggedIn, ELoginStatus::LoggedIn, *UserId);
-			        }
-			        else
-			        {
-				        const auto& Error = LoginResult.GetOkValue().template Get<FString>();
-				        UE_LOG_ONLINE(Warning, TEXT("Failed to login to Atto server: %s"), *Error);
-				        TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
-			        }
-		        });
+					        UE_LOG_ONLINE(Log, TEXT("Successfully logged into Atto server, userId=%s"), *UserId->ToDebugString());
+					        TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
+					        TriggerOnLoginChangedDelegates(LocalUserNum);
+					        TriggerOnLoginStatusChangedDelegates(LocalUserNum, ELoginStatus::NotLoggedIn, ELoginStatus::LoggedIn, *UserId);
+				        }
+				        else
+				        {
+					        const auto& Error = LoginResult.GetOkValue().template Get<FString>();
+					        UE_LOG_ONLINE(Warning, TEXT("Failed to login to Atto server: %s"), *Error);
+					        TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
+				        }
+			        });
+		    };
+
+		    if (const auto* PlatformOSS = IOnlineSubsystem::GetByPlatform())
+		    {
+			    if (const auto& PlatformIdentity = PlatformOSS->GetIdentityInterface())
+			    {
+				    if (PlatformIdentity->GetLoginStatus(LocalUserNum) == ELoginStatus::LoggedIn)
+				    {
+					    OnPlatformNicknameObtained(PlatformIdentity->GetPlayerNickname(LocalUserNum));
+				    }
+				    else
+				    {
+					    const auto OnLoginCompleteHandle = MakeShared<FDelegateHandle>();
+
+					    *OnLoginCompleteHandle = PlatformIdentity->AddOnLoginCompleteDelegate_Handle(
+					        LocalUserNum,
+					        FOnLoginCompleteDelegate::CreateLambda([=](int32 LocalUserNum, bool bWasSuccessful, const FUniqueNetId& UserId, const FString& Error) {
+						        PlatformIdentity->ClearOnLoginCompleteDelegate_Handle(LocalUserNum, *OnLoginCompleteHandle);
+
+						        OnPlatformNicknameObtained(PlatformIdentity->GetPlayerNickname(LocalUserNum));
+					        }));
+
+					    PlatformIdentity->AutoLogin(LocalUserNum);
+				    }
+			    }
+			    else
+			    {
+				    OnPlatformNicknameObtained(TOptional<FString>{});
+			    }
+		    }
+		    else
+		    {
+			    OnPlatformNicknameObtained(TOptional<FString>{});
+		    }
 	    });
 
 	return true;

@@ -118,7 +118,14 @@ void FAttoConnection::SendFromQueueInternal()
 
 TFuture<FAttoLoginRequest::Result> FAttoConnection::operator()(const FAttoLoginRequest& Message)
 {
-	UE_LOG(LogAtto, Verbose, TEXT("Login request from %s"), *Message.Username);
+	if (const auto* PlatformNicknamePtr = Message.PlatformNickname.GetPtrOrNull())
+	{
+		UE_LOG(LogAtto, Log, TEXT("Login request from %s [platform nickname: %s]"), *Message.Username, **PlatformNicknamePtr);
+	}
+	else
+	{
+		UE_LOG(LogAtto, Log, TEXT("Login request from %s"), *Message.Username);
+	}
 
 	auto Func = [&]() -> FAttoLoginRequest::Result {
 		if (Message.BuildUniqueId != GetBuildUniqueId())

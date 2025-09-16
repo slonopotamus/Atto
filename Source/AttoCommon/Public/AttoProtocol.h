@@ -11,11 +11,14 @@ struct ATTOCOMMON_API FAttoLoginRequest
 	// TODO: Handle this during WS upgrade procedure?
 	int32 BuildUniqueId = 0;
 
+	TOptional<FString> PlatformNickname;
+
 	friend FArchive& operator<<(FArchive& Ar, FAttoLoginRequest& Message)
 	{
 		Ar << Message.Username;
 		Ar << Message.Password;
 		Ar << Message.BuildUniqueId;
+		Ar << Message.PlatformNickname;
 
 		return Ar;
 	}
