@@ -142,12 +142,14 @@ TFuture<FAttoLoginRequest::Result> FAttoConnection::operator()(const FAttoLoginR
 			return FAttoLoginRequest::Result{TInPlaceType<FString>(), Error};
 		}
 
+#if 0
 		if (Message.Username != Message.Password)
 		{
 			static const auto* const Error = TEXT("Wrong password");
 			UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
 			return FAttoLoginRequest::Result{TInPlaceType<FString>(), Error};
 		}
+#endif
 
 		const auto Guid = FGuid::NewGuid();
 		const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));
