@@ -11,6 +11,7 @@ public class AttoServer : ModuleRules
 			"CoreOnline",
 			"CoreUObject",
 			"Engine",
+			"HTTP",
 			"libWebSockets",
 			"OnlineSubsystem"
 		});

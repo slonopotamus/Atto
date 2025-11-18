@@ -1,5 +1,8 @@
 #include "AttoConnection.h"
 #include "AttoServer.h"
+#include "HttpModule.h"
+#include "Interfaces/IHttpResponse.h"
+#include "PlatformHttp.h"
 
 // Work around a conflict between a UI namespace defined by engine code and a typedef in OpenSSL
 #define UI UI_ST
@@ -41,6 +44,11 @@ bool FAttoMessage::Write(lws* LwsConnection)
 
 FAttoConnection::~FAttoConnection()
 {
+	for (const auto& PendingRequest : PendingRequests)
+	{
+		PendingRequest->CancelRequest();
+	}
+
 	for (const auto& UserId : Users)
 	{
 		Server.Matchmaker.DestroySession(UserId);
@@ -116,50 +124,103 @@ void FAttoConnection::SendFromQueueInternal()
 	}
 }
 
-TFuture<FAttoLoginRequest::Result> FAttoConnection::operator()(const FAttoLoginRequest& Message)
+TFuture<FAttoLoginRequest::Result> FAttoConnection::Login(const FAttoUsernameCredentials& Credentials)
 {
-	if (const auto* PlatformNicknamePtr = Message.PlatformNickname.GetPtrOrNull())
-	{
-		UE_LOG(LogAtto, Log, TEXT("Login request from %s [platform nickname: %s]"), *Message.Username, **PlatformNicknamePtr);
-	}
-	else
-	{
-		UE_LOG(LogAtto, Log, TEXT("Login request from %s"), *Message.Username);
-	}
+	UE_LOG(LogAtto, Log, TEXT("Username auth request from %s"), *Credentials.Username);
 
 	auto Func = [&]() -> FAttoLoginRequest::Result {
-		if (Message.BuildUniqueId != GetBuildUniqueId())
-		{
-			const auto Error = FString::Printf(TEXT("Mismatched build id. Server: %d != Client: %d"), GetBuildUniqueId(), Message.BuildUniqueId);
-			UE_LOG(LogAtto, Verbose, TEXT("%s"), *Error);
-			return FAttoLoginRequest::Result{TInPlaceType<FString>(), Error};
-		}
-
-		if (Message.Username.IsEmpty())
+		if (Credentials.Username.IsEmpty())
 		{
 			static const auto* const Error = TEXT("Username must not be empty");
 			UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
 			return FAttoLoginRequest::Result{TInPlaceType<FString>(), Error};
 		}
 
-#if 0
-		if (Message.Username != Message.Password)
+		if (Credentials.Username != Credentials.Password)
 		{
 			static const auto* const Error = TEXT("Wrong password");
 			UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
 			return FAttoLoginRequest::Result{TInPlaceType<FString>(), Error};
 		}
-#endif
 
-		const auto Guid = FGuid::NewGuid();
-		const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));
-		Users.Add(Id);
-
-		UE_LOG(LogAtto, Verbose, TEXT("Login succeeded with userId=%016llx"), Id);
-		return FAttoLoginRequest::Result{TInPlaceType<uint64>(), Id};
+		const auto UserId = OnAuthenticationCompleted();
+		return FAttoLoginRequest::Result{TInPlaceType<uint64>(), UserId};
 	};
 
 	return MakeFulfilledPromise<FAttoLoginRequest::Result>(Func()).GetFuture();
+}
+
+TFuture<FAttoLoginRequest::Result> FAttoConnection::Login(const FAttoSteamCredentials& Credentials)
+{
+	FString SteamAPIKey;
+	if (!GConfig->GetString(TEXT("Atto"), TEXT("SteamAPIKey"), SteamAPIKey, GEngineIni))
+	{
+		static constexpr auto* const Error = TEXT("[Atto]::SteamAPIKey is not set in Engine.ini");
+		UE_LOG(LogAtto, Error, TEXT("%s"), Error);
+		return MakeFulfilledPromise<FAttoLoginRequest::Result>(TInPlaceType<FString>(), Error).GetFuture();
+	}
+
+	int32 SteamAppId = 0;
+	if (!GConfig->GetInt(TEXT("OnlineSubsystemSteam"), TEXT("SteamDevAppId"), SteamAppId, GEngineIni))
+	{
+		static constexpr auto* const Error = TEXT("[OnlineSubsystemSteam]::SteamDevAppId is not set in Engine.ini");
+		UE_LOG(LogAtto, Error, TEXT("%s"), Error);
+		return MakeFulfilledPromise<FAttoLoginRequest::Result>(TInPlaceType<FString>(), Error).GetFuture();
+	}
+
+	const auto Request = FHttpModule::Get().CreateRequest();
+	PendingRequests.Add(Request);
+
+	Request->SetVerb(TEXT("GET"));
+
+	const auto URL = FString::Printf(
+	    TEXT("https://api.steampowered.com/ISteamUserAuth/AuthenticateUserTicket/v1/?ticket=%s&identity=%s&key=%s&appid=%d"),
+	    *FPlatformHttp::UrlEncode(Credentials.WebApiTicket),
+	    *FPlatformHttp::UrlEncode(Atto::GetSteamServiceIdentity()),
+	    *FPlatformHttp::UrlEncode(SteamAPIKey),
+	    SteamAppId);
+
+	Request->SetURL(URL);
+
+	const auto Promise = MakeShared<TPromise<FAttoLoginRequest::Result>>();
+
+	Request->OnProcessRequestComplete().BindLambda([=, this](const TSharedPtr<IHttpRequest> HttpRequestPtr, const TSharedPtr<IHttpResponse> HttpResponsePtr, const bool bWasSuccessful) {
+		PendingRequests.Remove(Request);
+
+		if (!bWasSuccessful || HttpResponsePtr->GetResponseCode() != EHttpResponseCodes::Ok)
+		{
+			UE_LOG(LogAtto, Warning, TEXT("Failed to authenticate Steam ticket: %s"), *HttpResponsePtr->GetContentAsString())
+			Promise->EmplaceValue(TInPlaceType<FString>{}, TEXT("Failed to authenticate Steam ticket"));
+			return;
+		}
+
+		const auto UserId = OnAuthenticationCompleted();
+		Promise->EmplaceValue(TInPlaceType<uint64>(), UserId);
+	});
+	Request->ProcessRequest();
+
+	return Promise->GetFuture();
+}
+
+int64 FAttoConnection::OnAuthenticationCompleted()
+{
+	const auto Guid = FGuid::NewGuid();
+	const auto Id = CityHash64(reinterpret_cast<const char*>(&Guid), sizeof(Guid));
+	Users.Add(Id);
+	UE_LOG(LogAtto, Log, TEXT("Login succeeded with userId=%016llx"), Id);
+	return Id;
+}
+
+TFuture<FAttoLoginRequest::Result> FAttoConnection::operator()(const FAttoLoginRequest& Message)
+{
+	if (Message.BuildUniqueId != GetBuildUniqueId())
+	{
+		const auto Error = FString::Printf(TEXT("Mismatched build id. Server: %d != Client: %d"), GetBuildUniqueId(), Message.BuildUniqueId);
+		UE_LOG(LogAtto, Warning, TEXT("%s"), *Error);
+		return MakeFulfilledPromise<FAttoLoginRequest::Result>(TInPlaceType<FString>(), Error).GetFuture();
+	}
+
+	return Visit([&](const auto& Credentials) { return Login(Credentials); }, Message.Credentials);
 }
 
 TFuture<FAttoLogoutRequest::Result> FAttoConnection::operator()(const FAttoLogoutRequest& Message)
@@ -287,14 +348,14 @@ TFuture<FAttoStartMatchmakingRequest::Result> FAttoConnection::operator()(const 
 
 	if (Users.IsEmpty())
 	{
-		static const auto* const Error = TEXT("Not authenticated");
+		static constexpr auto* Error = TEXT("Not authenticated");
 		UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
 		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, Error).GetFuture();
 	}
 
 	if (Users.Num() != Message.Users.Num())
 	{
-		static const auto* const Error = TEXT("All connected users must enter matchmaking");
+		static constexpr auto* const Error = TEXT("All connected users must enter matchmaking");
 		UE_LOG(LogAtto, Verbose, TEXT("%s"), Error);
 		return MakeFulfilledPromise<FAttoStartMatchmakingRequest::Result>(TInPlaceType<FString>{}, Error).GetFuture();
 	}
