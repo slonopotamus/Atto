@@ -38,6 +38,12 @@ namespace Atto
 
 		return {};
 	}
+
+	FString GetSteamServiceIdentity()
+	{
+		static const FString DefaultSteamServiceIdentity{TEXT("Atto")};
+		return GConfig->GetStringOrDefault(TEXT("Atto"), TEXT("SteamServiceIdentity"), DefaultSteamServiceIdentity, GEngineIni);
+	}
 } // namespace Atto
 
 DEFINE_LOG_CATEGORY(LogAtto);

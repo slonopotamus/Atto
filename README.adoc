@@ -64,6 +64,28 @@ bOnlinePIEEnabled=True
 +Logins=(Id="user4",Type="Atto",TokenBytes=(227,203,173,173,239,219,173,172,239,138,173,222,239,190,173,222))
 ----
 
+=== Steam authentication
+
+.Config/DefaultEngine.ini
+[source,ini]
+----
+[OnlineSubsystem]
+DefaultPlatformService=Atto
+NativePlatformService=Steam
+
+[Atto]
+SteamServiceIdentity=... ; Defaults to "Atto"
+SteamAPIKey=... ; Do not put this in your game client
+
+[OnlineSubsystemAtto]
+bEnabled=True
+bEnableSteamAuth=True
+
+[OnlineSubsystemSteam]
+bEnabled=True
+SteamDevAppId=480 ; Replace with your app id
+----
+
 == Futher development ideas
 
 * Persistent data storage
