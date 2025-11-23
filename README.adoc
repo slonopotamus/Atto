@@ -46,11 +46,14 @@ Set Atto as default online subsystem:
 ----
 [OnlineSubsystem]
 DefaultPlatformService=Atto
+
+[OnlineSubsystemAtto]
+bEnabled=True
 ----
 
 Add login credentials for PIE:
 
-.Config/EditorPerProjectUserSettings.ini
+.Config/DefaultEditorPerProjectUserSettings.ini
 [source,ini]
 ----
 [/Script/OnlineSubsystemUtils.OnlinePIESettings]
