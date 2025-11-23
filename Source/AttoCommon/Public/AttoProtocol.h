@@ -2,23 +2,46 @@
 
 #include "OnlineSessionSettings.h"
 
-struct ATTOCOMMON_API FAttoLoginRequest
+struct ATTOCOMMON_API FAttoUsernameCredentials
 {
 	FString Username;
 
 	FString Password;
 
-	// TODO: Handle this during WS upgrade procedure?
-	int32 BuildUniqueId = 0;
-
-	TOptional<FString> PlatformNickname;
-
-	friend FArchive& operator<<(FArchive& Ar, FAttoLoginRequest& Message)
+	friend FArchive& operator<<(FArchive& Ar, FAttoUsernameCredentials& Message)
 	{
 		Ar << Message.Username;
 		Ar << Message.Password;
+
+		return Ar;
+	}
+};
+
+struct ATTOCOMMON_API FAttoSteamCredentials
+{
+	FString WebApiTicket;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoSteamCredentials& Message)
+	{
+		Ar << Message.WebApiTicket;
+
+		return Ar;
+	}
+};
+
+using FAttoAuthCredentials = TVariant<FAttoUsernameCredentials, FAttoSteamCredentials>;
+
+struct ATTOCOMMON_API FAttoLoginRequest
+{
+	FAttoAuthCredentials Credentials;
+
+	// TODO: Handle this during WS upgrade procedure?
+	int32 BuildUniqueId = 0;
+
+	friend FArchive& operator<<(FArchive& Ar, FAttoLoginRequest& Message)
+	{
+		Ar << Message.Credentials;
 		Ar << Message.BuildUniqueId;
-		Ar << Message.PlatformNickname;
 
 		return Ar;
 	}

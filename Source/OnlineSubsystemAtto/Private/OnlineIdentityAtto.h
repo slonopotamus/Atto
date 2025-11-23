@@ -2,6 +2,7 @@
 
 #include "Interfaces/OnlineIdentityInterface.h"
 
+class IOnlineSubsystem;
 class FOnlineSubsystemAtto;
 class FUniqueNetIdAtto;
 
@@ -11,6 +12,8 @@ class FOnlineIdentityAtto final : public IOnlineIdentity
 
 	TMap<int32, TSharedRef<const FUniqueNetIdAtto>> LocalUsers;
 	TMap<TSharedRef<const FUniqueNetId>, TSharedRef<FUserOnlineAccount>> Accounts;
+
+	static void GetPlatformAuthToken(const IOnlineSubsystem& PlatformSubsystem, int32 LocalUserNum, const FString& TokenType, const FOnGetLinkedAccountAuthTokenCompleteDelegate& Delegate);
 
 public:
 	explicit FOnlineIdentityAtto(FOnlineSubsystemAtto& Subsystem)

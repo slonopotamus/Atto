@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AttoProtocol.h"
+#include "Interfaces/IHttpRequest.h"
 
 class FAttoServer;
 class FAttoServerInstance;
@@ -30,6 +31,8 @@ class FAttoConnection final : public FNoncopyable
 	TSet<uint64> Users;
 
 	TQueue<FAttoMessage> SendQueue;
+
+	TSet<TSharedRef<IHttpRequest>> PendingRequests;
 
 	void Enqueue(FAttoMessage&& Message);
 
@@ -68,6 +71,12 @@ class FAttoConnection final : public FNoncopyable
 	{
 		Send(RequestId, FAttoServerResponseProtocol{TInPlaceType<V>(), Forward<ArgTypes>(Args)...});
 	}
+
+	TFuture<FAttoLoginRequest::Result> Login(const FAttoUsernameCredentials& Credentials);
+
+	TFuture<FAttoLoginRequest::Result> Login(const FAttoSteamCredentials& Credentials);
+
+	int64 OnAuthenticationCompleted();
 
 	TFuture<FAttoLoginRequest::Result> operator()(const FAttoLoginRequest& Message);
 
