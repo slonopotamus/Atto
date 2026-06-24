@@ -1,9 +1,16 @@
 #include "OnlineIdentityAtto.h"
 #include "AttoClient.h"
+#include "AttoCommon.h"
 #include "OnlineError.h"
 #include "OnlineSubsystemAtto.h"
 #include "UniqueNetIdAtto.h"
 #include "UserOnlineAccountAtto.h"
+
+template<class... Ts>
+struct TOverloaded : Ts...
+{
+	using Ts::operator()...;
+};
 
 bool FOnlineIdentityAtto::AutoLogin(const int32 LocalUserNum)
 {
@@ -22,6 +29,44 @@ bool FOnlineIdentityAtto::AutoLogin(const int32 LocalUserNum)
 
 	// TODO: Do not autologin if we are a non-PIE AttoServer, so we do not connect to ourselves
 	return Login(LocalUserNum, FOnlineAccountCredentials(GetAuthType(), TEXT("user1"), TEXT("user1")));
+}
+
+void FOnlineIdentityAtto::GetPlatformAuthToken(const IOnlineSubsystem& PlatformSubsystem, const int32 LocalUserNum, const FString& TokenType, const FOnGetLinkedAccountAuthTokenCompleteDelegate& Delegate)
+{
+	const auto PlatformIdentity = PlatformSubsystem.GetIdentityInterface();
+	if (!PlatformIdentity)
+	{
+		Delegate.ExecuteIfBound(LocalUserNum, false, FExternalAuthToken());
+		return;
+	}
+
+	const auto OnLoginComplete = [=](const bool bWasSuccessful) {
+		if (!bWasSuccessful)
+		{
+			Delegate.ExecuteIfBound(LocalUserNum, false, FExternalAuthToken());
+			return;
+		}
+
+		PlatformIdentity->GetLinkedAccountAuthToken(LocalUserNum, TokenType, Delegate);
+	};
+
+	if (PlatformIdentity->GetLoginStatus(LocalUserNum) == ELoginStatus::LoggedIn)
+	{
+		OnLoginComplete(true);
+	}
+	else
+	{
+		const TSharedRef<FDelegateHandle> DelegateHandleRef = MakeShared<FDelegateHandle>();
+		*DelegateHandleRef = PlatformIdentity->AddOnLoginCompleteDelegate_Handle(
+		    LocalUserNum,
+		    FOnLoginCompleteDelegate::CreateLambda([=](const int32 /* LocalUserNum */, const bool bWasSuccessful, const FUniqueNetId& UserId, const FString& Error) {
+			    PlatformIdentity->ClearOnLoginCompleteDelegate_Handle(LocalUserNum, *DelegateHandleRef);
+
+			    OnLoginComplete(bWasSuccessful);
+		    }));
+
+		PlatformIdentity->AutoLogin(LocalUserNum);
+	}
 }
 
 bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCredentials& AccountCredentials)
@@ -49,13 +94,13 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 	    .Next([=, this](auto&& ConnectResult) {
 		    if (!ConnectResult)
 		    {
-			    TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, TEXT("Connect failed"));
+			    TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, TEXT("Failed to connect to Atto server"));
 			    return;
 		    }
 
-		    auto OnPlatformNicknameObtained = [=, this](const TOptional<FString>& PlatformNickname) {
+		    const auto OnGotCredentials = [=, this](FAttoAuthCredentials&& Credentials) {
 			    Subsystem.AttoClient
-			        ->Send<FAttoLoginRequest>(AccountCredentials.Id, AccountCredentials.Token, GetBuildUniqueId(), PlatformNickname)
+			        ->Send<FAttoLoginRequest>(Credentials, GetBuildUniqueId())
 			        .Next([=, this](auto&& LoginResult) {
 				        if (!LoginResult.IsOk())
 				        {
@@ -63,59 +108,53 @@ bool FOnlineIdentityAtto::Login(const int32 LocalUserNum, const FOnlineAccountCr
 					        return;
 				        }
 
-				        // TODO: Rewrite this using Visit
-				        if (const auto* UserIdPtr = LoginResult.GetOkValue().template TryGet<uint64>())
-				        {
-					        const auto UserId = FUniqueNetIdAtto::Create(*UserIdPtr);
-					        Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
-					        LocalUsers.Add(LocalUserNum, UserId);
+				        Visit(TOverloaded{
+				                  [&](const uint64 UserIdValue) {
+					                  const auto UserId = FUniqueNetIdAtto::Create(UserIdValue);
+					                  Accounts.Add(UserId, MakeShared<FUserOnlineAccountAtto>(UserId));
+					                  LocalUsers.Add(LocalUserNum, UserId);
 
-					        UE_LOG_ONLINE(Log, TEXT("Successfully logged into Atto server, userId=%s"), *UserId->ToDebugString());
-					        TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
-					        TriggerOnLoginChangedDelegates(LocalUserNum);
-					        TriggerOnLoginStatusChangedDelegates(LocalUserNum, ELoginStatus::NotLoggedIn, ELoginStatus::LoggedIn, *UserId);
-				        }
-				        else
-				        {
-					        const auto& Error = LoginResult.GetOkValue().template Get<FString>();
-					        UE_LOG_ONLINE(Warning, TEXT("Failed to login to Atto server: %s"), *Error);
-					        TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
-				        }
+					                  UE_LOG_ONLINE(Log, TEXT("Successfully logged into Atto server, userId=%s"), *UserId->ToDebugString());
+					                  TriggerOnLoginCompleteDelegates(LocalUserNum, true, *UserId, TEXT(""));
+					                  TriggerOnLoginChangedDelegates(LocalUserNum);
+					                  TriggerOnLoginStatusChangedDelegates(LocalUserNum, ELoginStatus::NotLoggedIn, ELoginStatus::LoggedIn, *UserId);
+				                  },
+
+				                  [&](const FString& Error) {
+					                  UE_LOG_ONLINE(Warning, TEXT("Failed to login into Atto server: %s"), *Error);
+					                  TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, Error);
+				                  },
+				              },
+				              LoginResult.GetOkValue());
 			        });
 		    };
 
 		    if (const auto* PlatformOSS = IOnlineSubsystem::GetByPlatform())
 		    {
-			    if (const auto& PlatformIdentity = PlatformOSS->GetIdentityInterface())
+			    if (PlatformOSS->GetSubsystemName() == STEAM_SUBSYSTEM && GConfig->GetBoolOrDefault(TEXT("OnlineSubsystemAtto"), TEXT("bEnableSteamAuth"), false, GEngineIni))
 			    {
-				    if (PlatformIdentity->GetLoginStatus(LocalUserNum) == ELoginStatus::LoggedIn)
-				    {
-					    OnPlatformNicknameObtained(PlatformIdentity->GetPlayerNickname(LocalUserNum));
-				    }
-				    else
-				    {
-					    const auto OnLoginCompleteHandle = MakeShared<FDelegateHandle>();
+				    const auto TokenType = FString::Printf(TEXT("WebApi:%s"), *Atto::GetSteamServiceIdentity());
 
-					    *OnLoginCompleteHandle = PlatformIdentity->AddOnLoginCompleteDelegate_Handle(
-					        LocalUserNum,
-					        FOnLoginCompleteDelegate::CreateLambda([=](int32 LocalUserNum, bool bWasSuccessful, const FUniqueNetId& UserId, const FString& Error) {
-						        PlatformIdentity->ClearOnLoginCompleteDelegate_Handle(LocalUserNum, *OnLoginCompleteHandle);
+				    GetPlatformAuthToken(
+				        *PlatformOSS,
+				        LocalUserNum,
+				        TokenType,
+				        FOnGetLinkedAccountAuthTokenCompleteDelegate::CreateLambda([=, this](const int32 /* LocalUserNum */, const bool bWasSuccessful, const FExternalAuthToken& AuthToken) {
+					        if (bWasSuccessful && ensure(AuthToken.HasTokenString()))
+					        {
+						        OnGotCredentials(FAttoAuthCredentials{TInPlaceType<FAttoSteamCredentials>(), AuthToken.TokenString});
+					        }
+					        else
+					        {
+						        TriggerOnLoginCompleteDelegates(LocalUserNum, false, FUniqueNetIdAtto::Invalid, TEXT("Failed to obtain platform auth token"));
+					        }
+				        }));
 
-						        OnPlatformNicknameObtained(PlatformIdentity->GetPlayerNickname(LocalUserNum));
-					        }));
-
-					    PlatformIdentity->AutoLogin(LocalUserNum);
-				    }
-			    }
-			    else
-			    {
-				    OnPlatformNicknameObtained(TOptional<FString>{});
+				    return;
 			    }
 		    }
-		    else
-		    {
-			    OnPlatformNicknameObtained(TOptional<FString>{});
-		    }
+
+		    OnGotCredentials(FAttoAuthCredentials{TInPlaceType<FAttoUsernameCredentials>(), AccountCredentials.Id, AccountCredentials.Token});
 	    });
 
 	return true;
